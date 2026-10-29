@@ -7,10 +7,11 @@ const FIELDS = {
   circle: [['Center X', e => e.cx, (e, v) => e.cx = v], ['Center Y', e => e.cy, (e, v) => e.cy = v], ['Radius', e => e.r, (e, v) => e.r = v], ['Diameter', e => e.r * 2, (e, v) => e.r = v / 2]],
   arc: [['Center X', e => e.cx, (e, v) => e.cx = v], ['Center Y', e => e.cy, (e, v) => e.cy = v], ['Radius', e => e.r, (e, v) => e.r = v], ['Diameter', e => e.r * 2, (e, v) => e.r = v / 2],
     ['Start °', e => norm(e.a0) * D, (e, v) => e.a0 = v * R], ['End °', e => norm(e.a1) * D, (e, v) => e.a1 = v * R]],
-  polyline: [],
+  polyline: [], dim: [],
 };
 const fmt = v => String(+v.toFixed(6));
-export function createPanel(root, drawing, getSel, onChange, say) {
+import { resolveDim } from '../geometry/dimensions.js';
+export function createPanel(root, drawing, getSel, onChange, say, tx) {
   function render() {
     const ents = getSel().map(id => drawing.get(id)).filter(Boolean);
     root.innerHTML = '';
@@ -26,15 +27,16 @@ export function createPanel(root, drawing, getSel, onChange, say) {
         if (inp.value.trim() === '' || !Number.isFinite(v)) { say('Enter a number.'); return render(); }
         set(c, v); const err = validate(c);
         if (err) { say(err); return render(); }
-        Object.assign(e, c); onChange(); render();
+        tx(() => Object.assign(e, c)); onChange(); render();
       });
       row.appendChild(inp);
     }
     if (e.type === 'polyline') { h(`<span>Vertices</span><b>${e.pts.length}</b>`); h(`<span>Closed</span><b>${e.closed ? 'yes' : 'no'}</b>`); }
-    h(`<span>${e.type === 'circle' ? 'Circumference' : 'Total length'}</span><b>${fmt(length(e))}</b>`);
+    if (e.type === 'dim') { const g = resolveDim(drawing, e); h(`<span>Kind</span><b>${e.dtype}${e.ref ? ' (follows its object)' : ' (fixed points)'}</b>`); h(`<span>Value</span><b>${g ? g.text.str : 'reference lost'}</b>`); }
+    else h(`<span>${e.type === 'circle' ? 'Circumference' : 'Total length'}</span><b>${fmt(length(e))}</b>`);
     const lr = h('<span>Layer</span>'), sl = document.createElement('select');
     drawing.layers.forEach(l => sl.add(new Option(l.name, l.name, false, l.name === e.layer)));
-    sl.addEventListener('change', () => { e.layer = sl.value; onChange(); render(); }); lr.appendChild(sl);
+    sl.addEventListener('change', () => { tx(() => { e.layer = sl.value; }); onChange(); render(); }); lr.appendChild(sl);
     h(`<span>Color</span><b>${e.color === 'BYLAYER' ? 'by layer' : e.color}</b>`);
   }
   return { render };

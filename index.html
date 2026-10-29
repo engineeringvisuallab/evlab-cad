@@ -11,6 +11,7 @@
   <div class="brand"><b>EVLab CAD</b><span>Engineering • Innovation • Learning</span></div>
   <nav>
     <div class="menu"><button>Edit</button><div class="drop">
+      <button data-act="undo">Undo (Ctrl+Z)</button><button data-act="redo">Redo (Ctrl+Y)</button>
       <button data-act="delete">Delete selected (Del)</button>
       <button data-act="select-all">Select all</button>
       <button data-act="deselect">Deselect (Esc)</button>
@@ -26,14 +27,23 @@
       <button data-tool="line">Line</button><button data-tool="polyline">Polyline</button>
       <button data-tool="rect">Rectangle</button><button data-tool="circle">Circle</button><button data-tool="arc">Arc</button>
     </div></div>
+    <div class="menu"><button>Modify</button><div class="drop">
+      <button data-tool="move">Move</button><button data-tool="copy">Copy</button><button data-tool="rotate">Rotate</button><button data-tool="scale">Scale</button><button data-tool="mirror">Mirror</button>
+      <button data-tool="offset">Offset</button><button data-tool="trim">Trim</button><button data-tool="extend">Extend</button><button data-tool="fillet">Fillet</button><button data-tool="chamfer">Chamfer</button>
+      <button data-cmd="EXPLODE">Explode</button><button data-cmd="JOIN">Join</button><button data-cmd="AREA">Area of selection</button>
+    </div></div>
+    <div class="menu"><button>Annotate</button><div class="drop">
+      <button data-tool="dimlinear">Linear dimension</button><button data-tool="dimaligned">Aligned dimension</button><button data-tool="dimradius">Radius dimension</button><button data-tool="dimdiameter">Diameter dimension</button>
+    </div></div>
     <div class="menu"><button>Settings</button><div class="drop">
       <button data-act="units-mm">Units: millimetres</button>
       <button data-act="units-m">Units: metres</button>
     </div></div>
-    <span class="later" title="Arrives in a later milestone">File · Modify · Insert · Annotate · Layers · Tools · Help — not yet built</span>
+    <span class="later" title="Arrives in a later milestone">File · Insert · Layers · Tools · Help — not yet built</span>
   </nav>
 </header>
 <div id="toolbar">
+  <button data-act="undo">Undo</button><button data-act="redo">Redo</button><span class="sep"></span>
   <button data-tool="select">Select</button><button data-tool="dist">Distance</button>
   <button data-tool="line">Line</button><button data-tool="polyline">Polyline</button>
   <button data-tool="rect">Rectangle</button><button data-tool="circle">Circle</button><button data-tool="arc">Arc</button>

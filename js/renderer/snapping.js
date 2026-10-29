@@ -1,5 +1,5 @@
 import { segments, inSweep, dist, norm } from '../core/entity.js';
-function segSeg(a, b) {
+export function segSeg(a, b) {
   const [x1, y1, x2, y2] = a, [x3, y3, x4, y4] = b, d = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
   if (Math.abs(d) < 1e-12) return null;
   const t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / d, u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / d;

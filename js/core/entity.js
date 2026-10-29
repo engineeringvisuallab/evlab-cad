@@ -23,6 +23,7 @@ export function validate(e) {
       return dist(e.x1, e.y1, e.x2, e.y2) < 1e-9 ? bad('start and end are the same point') : null;
     case 'polyline': if (!Array.isArray(e.pts) || e.pts.length < 2 || !e.pts.every(p => fin(p[0], p[1]))) return bad('needs at least 2 numeric vertices');
       return length(e) < 1e-9 ? bad('zero length') : null;
+    case 'dim': return ['aligned', 'linear', 'radius', 'diameter'].includes(e.dtype) && Array.isArray(e.o) && fin(...e.o) ? null : bad('needs a type and a position');
     case 'circle': return !fin(e.cx, e.cy, e.r) ? bad('values must be numbers') : e.r <= 0 ? bad('radius must be greater than 0') : null;
     case 'arc': return !fin(e.cx, e.cy, e.r, e.a0, e.a1) ? bad('values must be numbers') : e.r <= 0 ? bad('radius must be greater than 0')
       : Math.abs(norm(e.a1 - e.a0)) < 1e-9 ? bad('start and end angles are the same') : null;

@@ -1,5 +1,5 @@
 import { drawGrid, drawAxes } from './grid.js';
-import { strokeEntity, drawGrips } from './entities.js';
+import { strokeEntity, drawEntity, drawGrips } from './entities.js';
 export class Renderer {
   constructor(canvas, vp) { this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.vp = vp; this.showGrid = true; }
   resize() {
@@ -14,7 +14,7 @@ export class Renderer {
     drawAxes(ctx, vp);
     ctx.lineWidth = 1.5;
     const vis = drawing.entities.filter(e => drawing.isVisible(e));
-    for (const e of vis) { const s = sel.has(e.id); ctx.strokeStyle = s ? '#f0b441' : drawing.colorOf(e); ctx.setLineDash(s ? [6, 3] : []); strokeEntity(ctx, vp, e); }
+    for (const e of vis) { const s = sel.has(e.id); ctx.strokeStyle = s ? '#f0b441' : drawing.colorOf(e); ctx.setLineDash(s ? [6, 3] : []); drawEntity(ctx, vp, drawing, e); }
     ctx.setLineDash([]);
     for (const e of vis) if (sel.has(e.id)) drawGrips(ctx, vp, e);
     if (preview) { ctx.strokeStyle = '#6fd3ff'; ctx.setLineDash([4, 4]); strokeEntity(ctx, vp, preview); ctx.setLineDash([]); }

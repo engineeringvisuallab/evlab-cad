@@ -1,5 +1,5 @@
-export function createLayerPanel(root, drawing, getSel, changed, say) {
-  const run = fn => { try { fn(); } catch (e) { say(e.message); } changed(); };
+export function createLayerPanel(root, drawing, getSel, changed, say, tx) {
+  const run = fn => { tx(fn); changed(); };
   const el = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); kids.forEach(k => n.append(k)); return n; };
   function render() {
     root.innerHTML = '';
