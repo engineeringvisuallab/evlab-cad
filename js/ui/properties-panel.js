@@ -32,7 +32,10 @@ export function createPanel(root, drawing, getSel, onChange, say) {
     }
     if (e.type === 'polyline') { h(`<span>Vertices</span><b>${e.pts.length}</b>`); h(`<span>Closed</span><b>${e.closed ? 'yes' : 'no'}</b>`); }
     h(`<span>${e.type === 'circle' ? 'Circumference' : 'Total length'}</span><b>${fmt(length(e))}</b>`);
-    h(`<span>Layer</span><b>${e.layer}</b>`); h(`<span>Color</span><b>${e.color}</b>`);
+    const lr = h('<span>Layer</span>'), sl = document.createElement('select');
+    drawing.layers.forEach(l => sl.add(new Option(l.name, l.name, false, l.name === e.layer)));
+    sl.addEventListener('change', () => { e.layer = sl.value; onChange(); render(); }); lr.appendChild(sl);
+    h(`<span>Color</span><b>${e.color === 'BYLAYER' ? 'by layer' : e.color}</b>`);
   }
   return { render };
 }

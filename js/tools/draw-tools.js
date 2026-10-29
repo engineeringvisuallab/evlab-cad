@@ -6,6 +6,7 @@ export const PROMPTS = {
   polyline: ['POLYLINE: specify start point', 'POLYLINE: next point (Enter, double-click or right-click to finish)'],
   rect: ['RECTANGLE: specify first corner', 'RECTANGLE: specify opposite corner'],
   circle: ['CIRCLE: specify center', 'CIRCLE: specify a point on the circle'],
+  dist: ['DIST: specify first point', 'DIST: specify second point'],
   arc: ['ARC: specify center', 'ARC: specify start point (sets radius)', 'ARC: specify end point (counter-clockwise)'],
 };
 export function prompt(tool, n) { const p = PROMPTS[tool]; return typeof p === 'string' ? p : p[Math.min(n, p.length - 1)]; }
@@ -17,6 +18,7 @@ export function preview(tool, pts, cur) {
     case 'polyline': return make.polyline([...pts, cur].map(p => [p.x, p.y]));
     case 'rect': return make.rect(a, cur);
     case 'circle': return make.circle(a.x, a.y, dist(a.x, a.y, cur.x, cur.y));
+    case 'dist': return make.line(a.x, a.y, cur.x, cur.y);
     case 'arc': return n === 1 ? make.line(a.x, a.y, cur.x, cur.y) : make.arc(a.x, a.y, dist(a.x, a.y, pts[1].x, pts[1].y), ang(a, pts[1]), ang(a, cur));
   }
 }
@@ -28,6 +30,8 @@ export function click(tool, pts, p) {
     case 'polyline': return { next: [...pts, p] };
     case 'rect': return n ? { entity: make.rect(pts[0], p), next: [] } : { next: [p] };
     case 'circle': return n ? { entity: make.circle(pts[0].x, pts[0].y, dist(pts[0].x, pts[0].y, p.x, p.y)), next: [] } : { next: [p] };
+    case 'dist': { if (!n) return { next: [p] }; const dx = p.x - pts[0].x, dy = p.y - pts[0].y;
+      return { message: `Distance ${Math.hypot(dx, dy).toFixed(4)}, angle ${((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360).toFixed(4)}°, ΔX ${dx.toFixed(4)}, ΔY ${dy.toFixed(4)}`, next: [] }; }
     case 'arc': return n === 2 ? { entity: make.arc(pts[0].x, pts[0].y, dist(pts[0].x, pts[0].y, pts[1].x, pts[1].y), ang(pts[0], pts[1]), ang(pts[0], p)), next: [] } : { next: [...pts, p] };
   }
 }
