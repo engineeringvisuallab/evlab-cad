@@ -1,0 +1,38 @@
+import { validate, length, dist, norm } from '../core/entity.js';
+const D = 180 / Math.PI, R = Math.PI / 180;
+const FIELDS = {
+  line: [['X1', e => e.x1, (e, v) => e.x1 = v], ['Y1', e => e.y1, (e, v) => e.y1 = v], ['X2', e => e.x2, (e, v) => e.x2 = v], ['Y2', e => e.y2, (e, v) => e.y2 = v],
+    ['Length', e => dist(e.x1, e.y1, e.x2, e.y2), (e, v) => { const a = Math.atan2(e.y2 - e.y1, e.x2 - e.x1); e.x2 = e.x1 + v * Math.cos(a); e.y2 = e.y1 + v * Math.sin(a); }],
+    ['Angle °', e => norm(Math.atan2(e.y2 - e.y1, e.x2 - e.x1)) * D, (e, v) => { const l = dist(e.x1, e.y1, e.x2, e.y2); e.x2 = e.x1 + l * Math.cos(v * R); e.y2 = e.y1 + l * Math.sin(v * R); }]],
+  circle: [['Center X', e => e.cx, (e, v) => e.cx = v], ['Center Y', e => e.cy, (e, v) => e.cy = v], ['Radius', e => e.r, (e, v) => e.r = v], ['Diameter', e => e.r * 2, (e, v) => e.r = v / 2]],
+  arc: [['Center X', e => e.cx, (e, v) => e.cx = v], ['Center Y', e => e.cy, (e, v) => e.cy = v], ['Radius', e => e.r, (e, v) => e.r = v], ['Diameter', e => e.r * 2, (e, v) => e.r = v / 2],
+    ['Start °', e => norm(e.a0) * D, (e, v) => e.a0 = v * R], ['End °', e => norm(e.a1) * D, (e, v) => e.a1 = v * R]],
+  polyline: [],
+};
+const fmt = v => String(+v.toFixed(6));
+export function createPanel(root, drawing, getSel, onChange, say) {
+  function render() {
+    const ents = getSel().map(id => drawing.get(id)).filter(Boolean);
+    root.innerHTML = '';
+    const h = t => { const d = document.createElement('div'); d.className = 'prow'; d.innerHTML = t; root.appendChild(d); return d; };
+    if (!ents.length) return h('<i>Nothing selected</i>');
+    if (ents.length > 1) return h(`<b>${ents.length} objects selected</b>`);
+    const e = ents[0];
+    h(`<span>Type</span><b>${e.type}</b>`); h(`<span>ID</span><b>${e.id}</b>`);
+    for (const [label, get, set] of FIELDS[e.type]) {
+      const row = h(`<span>${label}</span>`), inp = document.createElement('input'); inp.value = fmt(get(e));
+      inp.addEventListener('change', () => {
+        const v = Number(inp.value), c = structuredClone(e);
+        if (inp.value.trim() === '' || !Number.isFinite(v)) { say('Enter a number.'); return render(); }
+        set(c, v); const err = validate(c);
+        if (err) { say(err); return render(); }
+        Object.assign(e, c); onChange(); render();
+      });
+      row.appendChild(inp);
+    }
+    if (e.type === 'polyline') { h(`<span>Vertices</span><b>${e.pts.length}</b>`); h(`<span>Closed</span><b>${e.closed ? 'yes' : 'no'}</b>`); }
+    h(`<span>${e.type === 'circle' ? 'Circumference' : 'Total length'}</span><b>${fmt(length(e))}</b>`);
+    h(`<span>Layer</span><b>${e.layer}</b>`); h(`<span>Color</span><b>${e.color}</b>`);
+  }
+  return { render };
+}

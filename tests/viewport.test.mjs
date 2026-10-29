@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { Viewport } from '../js/core/viewport.js';
+import { gridSteps } from '../js/renderer/grid.js';
+const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
+const vp = new Viewport(800, 600); vp.cx = 12.5; vp.cy = -7; vp.scale = 3.7;
+const s = vp.toScreen(40, 25), w = vp.toWorld(s.x, s.y); near(w.x, 40); near(w.y, 25);
+const up = new Viewport(800, 600); assert.ok(up.toScreen(0, 10).y < up.toScreen(0, 0).y);
+const p = vp.toWorld(200, 150); vp.zoomAt(200, 150, 1.7); const q = vp.toWorld(200, 150); near(p.x, q.x); near(p.y, q.y);
+const b0 = vp.toWorld(400, 300); vp.panBy(30, -20); const a = vp.toWorld(430, 280); near(a.x, b0.x); near(a.y, b0.y);
+vp.fit({ minX: 0, minY: 0, maxX: 100, maxY: 50 }); const c = vp.toScreen(50, 25); near(c.x, 400); near(c.y, 300);
+const g = gridSteps(5); assert.ok(g.minor * 5 >= 12 && g.major === g.minor * 10);
+console.log('viewport tests passed');
