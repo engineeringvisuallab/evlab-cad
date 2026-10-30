@@ -10,6 +10,10 @@
 <header id="menubar">
   <div class="brand"><b>EVLab CAD</b><span>Engineering • Innovation • Learning</span></div>
   <nav>
+    <div class="menu"><button>File</button><div class="drop">
+      <button data-act="new">New</button><button data-act="open">Open…</button><button data-act="save">Save (Ctrl+S)</button><button data-act="saveas">Save As…</button>
+      <button data-act="dxfin">Import DXF…</button><button data-act="dxfout">Export DXF…</button>
+    </div></div>
     <div class="menu"><button>Edit</button><div class="drop">
       <button data-act="undo">Undo (Ctrl+Z)</button><button data-act="redo">Redo (Ctrl+Y)</button>
       <button data-act="delete">Delete selected (Del)</button>
@@ -25,7 +29,7 @@
     </div></div>
     <div class="menu"><button>Draw</button><div class="drop">
       <button data-tool="line">Line</button><button data-tool="polyline">Polyline</button>
-      <button data-tool="rect">Rectangle</button><button data-tool="circle">Circle</button><button data-tool="arc">Arc</button>
+      <button data-tool="rect">Rectangle</button><button data-tool="circle">Circle</button><button data-tool="arc">Arc</button><button data-tool="text">Text</button>
     </div></div>
     <div class="menu"><button>Modify</button><div class="drop">
       <button data-tool="move">Move</button><button data-tool="copy">Copy</button><button data-tool="rotate">Rotate</button><button data-tool="scale">Scale</button><button data-tool="mirror">Mirror</button>
@@ -35,28 +39,33 @@
     <div class="menu"><button>Annotate</button><div class="drop">
       <button data-tool="dimlinear">Linear dimension</button><button data-tool="dimaligned">Aligned dimension</button><button data-tool="dimradius">Radius dimension</button><button data-tool="dimdiameter">Diameter dimension</button>
     </div></div>
+    <div class="menu"><button>Layout</button><div class="drop">
+      <button data-act="view-model">Model space</button><button data-act="view-layout">Paper layout</button><button data-act="pdf">Export PDF…</button><button data-act="svg">Export SVG…</button>
+    </div></div>
     <div class="menu"><button>Settings</button><div class="drop">
       <button data-act="units-mm">Units: millimetres</button>
       <button data-act="units-m">Units: metres</button>
     </div></div>
-    <span class="later" title="Arrives in a later milestone">File · Insert · Layers · Tools · Help — not yet built</span>
+    <span class="later" title="Arrives in a later milestone">Tools · Help · PNG/CSV export · block attributes — not yet built</span>
   </nav>
 </header>
 <div id="toolbar">
+  <button data-act="new">New</button><button data-act="open">Open</button><button data-act="save">Save</button><button data-act="dxfout">Export DXF</button><span class="sep"></span>
   <button data-act="undo">Undo</button><button data-act="redo">Redo</button><span class="sep"></span>
   <button data-tool="select">Select</button><button data-tool="dist">Distance</button>
   <button data-tool="line">Line</button><button data-tool="polyline">Polyline</button>
-  <button data-tool="rect">Rectangle</button><button data-tool="circle">Circle</button><button data-tool="arc">Arc</button>
+  <button data-tool="rect">Rectangle</button><button data-tool="circle">Circle</button><button data-tool="arc">Arc</button><button data-tool="text">Text</button>
   <button data-act="delete">Delete</button>
   <span class="sep"></span>
+  <button data-act="view-model" id="b-model" class="on">Model</button><button data-act="view-layout" id="b-layout">Layout</button><span class="sep"></span>
   <button data-act="pan" id="btn-pan" title="Pan (middle mouse or Space)">Pan</button>
   <button data-act="zoom-in">Zoom +</button><button data-act="zoom-out">Zoom −</button>
   <button data-act="extents">Extents</button><button data-act="grid" id="btn-grid">Grid</button>
 </div>
 <main>
-  <aside id="layers"><h3>Layers</h3><div id="layers-body"></div></aside>
+  <aside id="layers"><h3>Layers</h3><div id="layers-body"></div><h3>Blocks</h3><div id="blocks-body"></div></aside>
   <div id="stage"><canvas id="cad" tabindex="0" aria-label="Drawing canvas"></canvas></div>
-  <aside id="props"><h3>Properties</h3><div id="props-body"></div></aside>
+  <aside id="props"><h3 id="props-title">Properties</h3><div id="props-body"></div></aside>
 </main>
 <div id="cmd"><div id="cmdlog"></div><input id="cmdin" autocomplete="off" spellcheck="false" placeholder="Command (LINE, CIRCLE, LAYER, HELP…) or point: 100,200 · @50,0 · @100<45"></div>
 <footer id="status">

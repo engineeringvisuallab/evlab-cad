@@ -1,5 +1,6 @@
 import { drawGrid, drawAxes } from './grid.js';
 import { strokeEntity, drawEntity, drawGrips } from './entities.js';
+import { drawSheet } from './sheet-renderer.js';
 export class Renderer {
   constructor(canvas, vp) { this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.vp = vp; this.showGrid = true; }
   resize() {
@@ -7,6 +8,7 @@ export class Renderer {
     this.canvas.width = Math.round(r.width * d); this.canvas.height = Math.round(r.height * d);
     this.ctx.setTransform(d, 0, 0, d, 0, 0); this.vp.resize(r.width, r.height);
   }
+  renderSheet(sheet) { const { ctx, vp } = this; ctx.fillStyle = '#2b3138'; ctx.fillRect(0, 0, vp.w, vp.h); drawSheet(ctx, sheet, this.lvp); }
   render(drawing, sel = new Set(), preview = null, box = null, snap = null) {
     const { ctx, vp } = this;
     ctx.fillStyle = '#0e1a22'; ctx.fillRect(0, 0, vp.w, vp.h);

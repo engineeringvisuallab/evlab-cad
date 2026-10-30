@@ -13,6 +13,8 @@ export function apply(e, T) {
   else if (o.type === 'polyline') o.pts = o.pts.map(p => T.pt(p[0], p[1]));
   else if (o.type === 'circle') { [o.cx, o.cy] = T.pt(o.cx, o.cy); o.r *= T.r; }
   else if (o.type === 'arc') { [o.cx, o.cy] = T.pt(o.cx, o.cy); o.r *= T.r; const a0 = T.da(e.a0), a1 = T.da(e.a1); o.a0 = T.flip ? a1 : a0; o.a1 = T.flip ? a0 : a1; }
+  else if (o.type === 'text') { [o.x, o.y] = T.pt(o.x, o.y); o.h *= T.r; o.rot = T.flip ? o.rot : T.da(o.rot); }
+  else if (o.type === 'insert') { if (T.flip) throw new Error('Mirror cannot flip a block reference. EXPLODE it first.'); [o.x, o.y] = T.pt(o.x, o.y); o.s *= T.r; o.rot = T.da(o.rot); }
   else if (o.type === 'dim') for (const k of ['p1', 'p2', 'o']) if (o[k]) o[k] = T.pt(o[k][0], o[k][1]);
   return o;
 }

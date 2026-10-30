@@ -1,9 +1,10 @@
 import { validate, bounds } from './entity.js';
-import { resolveDim } from '../geometry/dimensions.js';
+import { expand } from '../geometry/expand.js';
+import { defaultLayout } from '../layouts/paper-space.js';
 const PAL = ['#ff5f5f', '#5cb85c', '#6fd3ff', '#f0b441', '#c792ea', '#ff9f43'];
 const base = n => ({ name: n, color: '#e8eef2', lineType: 'Continuous', lineWeight: 0.25, visible: true, locked: false, frozen: false, plot: true });
 export class Drawing {
-  constructor() { this.entities = []; this.units = 'mm'; this.nextId = 1; this.dimStyle = { precision: 2, scale: 1, arrow: 2.5, text: 2.5 }; this.layers = [base('0')]; this.current = '0'; }
+  constructor() { this.entities = []; this.units = 'mm'; this.nextId = 1; this.blocks = {}; this.layout = defaultLayout(); this.dimStyle = { precision: 2, scale: 1, arrow: 2.5, text: 2.5 }; this.layers = [base('0')]; this.current = '0'; }
   layer(n) { return this.layers.find(l => l.name === n); }
   isVisible(e) { const l = this.layer(e.layer); return !!l && l.visible && !l.frozen; }
   isSelectable(e) { return this.isVisible(e) && !this.layer(e.layer).locked; }
@@ -26,10 +27,11 @@ export class Drawing {
   get(id) { return this.entities.find(e => e.id === id); }
   add(e) { // validates first, so a bad entity never enters the drawing
     const err = validate(e); if (err) throw new Error(err);
+    if (e.type === 'insert' && !this.blocks[e.block]) throw new Error(`No block named "${e.block}".`);
     const ent = { id: 'E' + this.nextId++, layer: this.current, color: 'BYLAYER', ...e };
     this.entities.push(ent); return ent;
   }
-  shapes(f = () => true) { const out = []; for (const e of this.entities) { if (!f(e)) continue; if (e.type !== 'dim') out.push(e); else { const g = resolveDim(this, e); if (g) g.lines.forEach(l => out.push({ id: e.id, layer: e.layer, type: 'line', x1: l[0], y1: l[1], x2: l[2], y2: l[3] })); } } return out; }
+  shapes(f = () => true) { const out = []; for (const e of this.entities) { if (!f(e)) continue; for (const x of expand(this, e)) out.push(x === e ? e : { ...x, id: e.id, layer: e.layer }); } return out; }
   remove(ids) { const s = new Set(ids); const n = this.entities.length; this.entities = this.entities.filter(e => !s.has(e.id) && !(e.type === 'dim' && s.has(e.ref))); return n - this.entities.length; }
   extents() {
     if (!this.entities.length) return null;

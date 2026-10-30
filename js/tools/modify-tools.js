@@ -1,8 +1,10 @@
 import { make } from '../core/entity.js';
 import * as X from '../geometry/modify.js';
 import * as TF from '../geometry/transforms.js';
+import { createBlock } from '../geometry/blocks.js';
 const DEG = Math.PI / 180, dimPrompts = n => [`${n}: click a line, or specify the first point`, `${n}: specify the second point`, `${n}: specify the dimension line position`];
 const PR = {
+  block: ['BLOCK: specify the base point'], insert: ['INSERT: specify the insertion point (Esc to finish)'],
   move: ['MOVE: specify base point', 'MOVE: specify destination'], copy: ['COPY: specify base point', 'COPY: specify destination (Enter to end)'],
   rotate: ['ROTATE: specify base point', 'ROTATE: click a direction, or type the angle in degrees'], scale: ['SCALE: specify base point', 'SCALE: type the scale factor (e.g. 2)'],
   mirror: ['MIRROR: first point of axis', 'MIRROR: second point of axis (originals are kept)'], offset: ['OFFSET: click an object', 'OFFSET: click the side to offset to'],
@@ -10,7 +12,7 @@ const PR = {
   fillet: ['FILLET: click the first line', 'FILLET: click the second line'], chamfer: ['CHAMFER: click the first line', 'CHAMFER: click the second line'],
   dimaligned: dimPrompts('DIMALIGNED'), dimlinear: dimPrompts('DIMLINEAR'), dimradius: ['DIMRADIUS: click a circle or arc', 'DIMRADIUS: specify label position'], dimdiameter: ['DIMDIAMETER: click a circle or arc', 'DIMDIAMETER: specify label position'] };
 export const isModify = t => t in PR;
-export const needsSel = t => ['move', 'copy', 'rotate', 'scale', 'mirror'].includes(t);
+export const needsSel = t => ['move', 'copy', 'rotate', 'scale', 'mirror', 'block'].includes(t);
 export function prompt(t, n, param, pts = []) {
   const p = PR[t], i = t.startsWith('dim') && t.length > 7 && pts[0]?.ref && p.length === 3 ? 2 : n;
   const extra = { offset: param > 0 ? ` (distance ${param})` : ' (type a distance first)', fillet: ` (radius ${param || 0})`, chamfer: param > 0 ? ` (distance ${param})` : ' (type a distance first)' }[t] ?? '';
@@ -21,6 +23,8 @@ export function click(t, pts, p, c) {
   const n = pts.length, ids = c.ids, a = pts[0], hit = () => c.pick(p), done = (apply, message, next = []) => ({ apply, message, next });
   const first = what => { const h = hit(); return h ? h : null; };
   switch (t) {
+    case 'block': return done(d => createBlock(d, c.param, ids, p), `Block "${c.param}" created from ${ids.length} object(s).`);
+    case 'insert': return { entity: { type: 'insert', block: c.param.name, x: p.x, y: p.y, s: c.param.s, rot: c.param.rot }, next: [] };
     case 'move': return n ? done(d => X.transformIds(d, ids, TF.move(p.x - a.x, p.y - a.y), false), `Moved ${ids.length} object(s).`) : { next: [p] };
     case 'copy': return n ? done(d => X.transformIds(d, ids, TF.move(p.x - a.x, p.y - a.y), true), `Copied ${ids.length} object(s). Click another destination or press Esc.`, [a]) : { next: [p] };
     case 'rotate': return n ? done(d => X.transformIds(d, ids, TF.rotate(a, Math.atan2(p.y - a.y, p.x - a.x)), false), `Rotated ${ids.length} object(s).`) : { next: [p] };

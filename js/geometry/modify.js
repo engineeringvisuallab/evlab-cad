@@ -1,6 +1,7 @@
 import { make, dist, norm, validate, segments, length, TAU } from '../core/entity.js';
 import { segSeg } from '../renderer/snapping.js';
 import * as TF from './transforms.js';
+import { expand } from './expand.js';
 export function transformIds(d, ids, T, copy) {
   if (!ids.length) throw new Error('Nothing selected.');
   for (const id of ids) {
@@ -58,9 +59,9 @@ export function corner(d, id1, id2, c1, c2, kind, val = 0) {
   } else if (kind === 'chamfer') d.add({ ...make.line(T1[0], T1[1], T2[0], T2[1]), layer: a.layer, color: a.color });
 }
 export function explodeIds(d, ids) {
-  let n = 0; for (const id of ids) { const e = d.get(id); if (e?.type !== 'polyline') continue;
+  let n = 0; for (const id of ids) { const e = d.get(id); if (e?.type === 'insert') { expand(d, e).forEach(p => d.add({ ...p, layer: e.layer })); d.remove([id]); n++; continue; } if (e?.type !== 'polyline') continue;
     segments(e).forEach(s => d.add({ ...make.line(...s), layer: e.layer, color: e.color })); d.remove([id]); n++; }
-  if (!n) throw new Error('EXPLODE works on polylines (and rectangles). Select one first.'); return n;
+  if (!n) throw new Error('EXPLODE works on polylines, rectangles and block references. Select one first.'); return n;
 }
 export function joinIds(d, ids) {
   const es = ids.map(i => d.get(i)).filter(Boolean); if (es.length < 2) throw new Error('Select at least 2 lines or open polylines to join.');
