@@ -28,7 +28,12 @@ export function buildSheet(d) {
   const T = { pt: (x, y) => [vp.x + vp.w / 2 + (x - l.center[0]) * k, vp.y + vp.h / 2 + (y - l.center[1]) * k], r: k, da: a => a, flip: false };
   for (const e of d.entities) {
     const L = d.layer(e.layer); if (!L || !L.visible || L.frozen || !L.plot) continue; const lw = Math.max(0.05, L.lineWeight);
-    for (const x of expand(d, e)) items.push({ ...item(TF.apply(x, T), lw), clip: true });
+    for (const x of expand(d, e)) {
+      const t = TF.apply(x, T);
+      if (t.type === 'point') items.push({ t: 'line', x1: t.x - 1, y1: t.y, x2: t.x + 1, y2: t.y, lw, clip: true }, { t: 'line', x1: t.x, y1: t.y - 1, x2: t.x, y2: t.y + 1, lw, clip: true });
+      else if (t.type === 'xline' || t.type === 'ray') { const c = 1e5 * Math.cos(t.a), s = 1e5 * Math.sin(t.a), f = t.type === 'xline'; items.push({ t: 'line', x1: f ? t.x - c : t.x, y1: f ? t.y - s : t.y, x2: t.x + c, y2: t.y + s, lw, clip: true }); }
+      else items.push({ ...item(t, lw), clip: true });
+    }
   }
   return { W, H, items, clip: vp };
 }

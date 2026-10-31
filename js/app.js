@@ -4,7 +4,7 @@ import { Renderer } from './renderer/canvas-renderer.js';
 import { gridSteps } from './renderer/grid.js';
 import { snapPoint } from './renderer/snapping.js';
 import { pick, boxSelect } from './core/selection.js';
-import { parsePoint, parseNumber, orthoPoint } from './core/coordinates.js';
+import { parsePoint, parseNumber, orthoPoint, polarPoint } from './core/coordinates.js';
 import { ALIASES, PLANNED, TOOL_OF } from './core/commands.js';
 import * as T from './tools/draw-tools.js';
 import * as M from './tools/modify-tools.js';
@@ -20,15 +20,20 @@ import { exportPdf } from './io/pdf-export.js';
 import { exportSvg } from './io/svg-export.js';
 import { createBlockPanel } from './ui/block-panel.js';
 import { createLayoutPanel } from './ui/layout-panel.js';
+import { createCivilPanel } from './ui/civil-panel.js';
+import { quantities, quantitiesText, coordinatesCsv } from './civil/quantities.js';
+import { addChainage } from './civil/chainage.js';
+import * as TF from './geometry/transforms.js';
 import { createPanel } from './ui/properties-panel.js';
 import { createLayerPanel } from './ui/layer-panel.js';
 
 const canvas = document.getElementById('cad'), $ = id => document.getElementById(id);
 const drawing = new Drawing(), vp = new Viewport(), renderer = new Renderer(canvas, vp);
-let panTool = false, space = false, panDrag = null, tool = 'select', pts = [], lastPt = null, cur = { x: 0, y: 0 }, snap = null;
+let panTool = false, space = false, panDrag = null, tool = 'select', pts = [], lastPt = null, cur = { x: 0, y: 0 }, snap = null, track = null, polarInc = 45;
 let mode = 'model'; const lvp = new Viewport(); renderer.lvp = lvp; const V = () => mode === 'layout' ? lvp : vp;
 let sel = new Set(), selStart = null, box = null, lastCmd = '';
-const modes = { end: 1, mid: 1, cen: 1, int: 1, per: 1, nea: 0 }, flags = { osnap: true, gsnap: false, ortho: false };
+const modes = { end: 1, mid: 1, cen: 1, int: 1, per: 1, nea: 0, nod: 1 }, flags = { osnap: true, gsnap: false, ortho: false, polar: false, dyn: true };
+const ui = { left: true, right: true, cmd: true }; try { Object.assign(ui, JSON.parse(localStorage.getItem('evlab:ui') || '{}')); } catch { /* defaults */ }
 const hist = []; let hi = 0; const param = {};
 const newId = () => globalThis.crypto?.randomUUID?.() ?? 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2);
 let project = { id: newId(), name: 'Untitled', created: new Date().toISOString(), handle: null }, dirty = false, saveTimer = null;
@@ -39,6 +44,17 @@ const panel = createPanel($('props-body'), drawing, () => [...sel], () => change
 const layers = createLayerPanel($('layers-body'), drawing, () => [...sel], () => changed(), say, tx);
 const blocksUI = createBlockPanel($('blocks-body'), drawing, fn => tx(fn), () => changed(), n => { param.insert = { name: n, s: 1, rot: 0 }; setTool('insert'); });
 const layoutUI = createLayoutPanel($('props-body'), drawing, fn => { tx(() => { const c = structuredClone(drawing.layout); fn(c); const err = validateLayout(c); if (err) throw new Error(err); drawing.layout = c; }); layoutUI.render(); update(); }, k => exportSheet(k));
+createCivilPanel($('civil-body'), drawing, { tx: fn => tx(fn), changed: () => changed(), say, log, getSel: () => [...sel], openCsv: () => F.openText('csv'), saveCsv: async (t, n) => { try { const r = await F.saveText(t, n, null, true, 'csv'); say(r ? `Exported ${r.name}.` : 'Export cancelled.'); } catch (e) { say(`Export failed: ${e.message}`); } } });
+let clip = [], pasteN = 0;
+function copySel(cut) {
+  const es = [...sel].map(id => drawing.get(id)).filter(e => e && !(e.type === 'dim' && e.ref));
+  if (!es.length) return say('Nothing to copy (dimensions that follow an object cannot be copied alone).');
+  clip = es.map(e => { const { id, ...r } = structuredClone(e); return r; }); pasteN = 0; say(`${cut ? 'Cut' : 'Copied'} ${es.length} object(s).`); if (cut) deleteSel();
+}
+function pasteClip() {
+  if (mode === 'layout') return say('Switch to Model to paste.'); if (!clip.length) return say('Clipboard is empty.'); pasteN++; const off = 20 * pasteN / vp.scale, ids = [];
+  if (tx(() => { for (const r of clip) { const t = TF.apply(r, TF.move(off, -off)); if (!drawing.layer(t.layer)) t.layer = drawing.current; ids.push(drawing.add(t).id); } })) { changed(); setSel(ids); say(`Pasted ${ids.length} object(s).`); }
+}
 const fitSheet = () => { const [W, H] = sheetSize(drawing.layout); lvp.resize(vp.w, vp.h); lvp.fit({ minX: 0, minY: 0, maxX: W, maxY: H }, 0.92); };
 function setMode(m) {
   if (m === mode) return; mode = m; pts = []; box = null; selStart = null; if (m === 'layout') { setTool('select'); fitSheet(); layoutUI.render(); } else panel.render();
@@ -53,10 +69,21 @@ function addText(t) { const e = { type: 'text', x: pts[0].x, y: pts[0].y, h: par
 function changed() { sel = new Set([...sel].filter(id => { const e = drawing.get(id); return e && drawing.isSelectable(e); })); layers.render(); blocksUI.render(); mode === 'layout' ? layoutUI.render() : panel.render(); update(); }
 function update() {
   if (mode === 'layout') { renderer.renderSheet(buildSheet(drawing)); $('zoom').textContent = `Sheet ${drawing.layout.size} 1:${drawing.layout.scale}`; return; }
-  renderer.render(drawing, sel, previewOf(), box, snap);
+  renderer.render(drawing, sel, previewOf(), box, snap, track, hudOf());
   $('zoom').textContent = `Scale ${vp.scale.toPrecision(4)} px/unit`;
-  for (const k of ['osnap', 'gsnap', 'ortho']) $('b-' + k).classList.toggle('on', flags[k]);
+  for (const k of ['osnap', 'gsnap', 'ortho', 'polar', 'dyn']) $('b-' + k).classList.toggle('on', flags[k]);
 }
+function hudOf() { // dynamic input display: distance and angle from the last point
+  if (!flags.dyn || mode !== 'model' || tool === 'select' || tool === 'text' || !pts.length) return null;
+  const f = pts[pts.length - 1], d = Math.hypot(cur.x - f.x, cur.y - f.y); if (d < 1e-9) return null; const s = vp.toScreen(cur.x, cur.y);
+  return { x: s.x, y: s.y, text: `${d.toFixed(3)} < ${((Math.atan2(cur.y - f.y, cur.x - f.x) * 180 / Math.PI + 360) % 360).toFixed(1)}°` };
+}
+function applyUi(save = true) {
+  const m = document.querySelector('main'); m.classList.toggle('no-left', !ui.left); m.classList.toggle('no-right', !ui.right); $('cmd').classList.toggle('hidden', !ui.cmd);
+  $('b-left').classList.toggle('on', ui.left); $('b-right').classList.toggle('on', ui.right); $('b-cmd').classList.toggle('on', ui.cmd); $('h-left').textContent = ui.left ? '◀' : '▶'; $('h-right').textContent = ui.right ? '▶' : '◀';
+  if (save) try { localStorage.setItem('evlab:ui', JSON.stringify(ui)); } catch { /* storage unavailable */ }
+}
+const togglePanel = k => { ui[k] = !ui[k]; applyUi(); };
 function setSel(ids) { sel = new Set(ids); panel.render(); update(); }
 function home() { vp.cx = 50; vp.cy = 30; vp.scale = 5; }
 function setPan(on) { panTool = on; $('btn-pan').classList.toggle('on', on); }
@@ -139,12 +166,14 @@ function setTool(t) {
 }
 // Raw world point -> effective point (object snap, else grid snap, then ortho).
 function resolve(w) {
-  snap = null; if (tool === 'select') return w;
+  snap = null; track = null; if (tool === 'select') return w;
   const from = pts.length ? pts[pts.length - 1] : null; let p = w;
   if (flags.osnap) snap = snapPoint(drawing.shapes(e => drawing.isVisible(e)), w, 10 / vp.scale, modes, from);
   if (snap) return { x: snap.x, y: snap.y };
   if (flags.gsnap) { const g = gridSteps(vp.scale).minor; p = { x: Math.round(w.x / g) * g, y: Math.round(w.y / g) * g }; }
-  return flags.ortho && from ? orthoPoint(p, from) : p;
+  if (flags.ortho && from) return orthoPoint(p, from);
+  const pp = flags.polar && from ? polarPoint(p, from, polarInc, 8 / vp.scale) : null; if (pp) { track = { from, to: pp }; return { x: pp.x, y: pp.y }; }
+  return p;
 }
 function commit(e) { let id; tx(() => { id = drawing.add(e).id; }); if (!id) return false; changed(); setSel([id]); return true; }
 function finish() {
@@ -155,17 +184,19 @@ function drawClick(p) {
   lastPt = p; if (M.isModify(tool)) return modClick(p); const r = T.click(tool, pts, p);
   if (r.entity && !commit(r.entity)) return update();
   if (r.message) say(r.message);
-  pts = r.next; if (!r.message) say(P(tool, r.entity && tool !== 'line' ? 0 : pts.length)); update();
+  pts = r.next; if (!r.message) say(P(tool, r.entity && !['line', 'xline', 'ray'].includes(tool) ? 0 : pts.length)); update();
 }
 function deleteSel() { if (mode === 'layout') return say('Switch to Model to edit objects.'); if (!sel.size) return say('Nothing selected.'); let n = 0; if (!tx(() => { n = drawing.remove([...sel]); })) return; say(`Deleted ${n} object(s). Ctrl+Z undoes.`); setSel([]); }
-const toggle = k => { flags[k] = !flags[k]; say(`${{ osnap: 'Object snap', gsnap: 'Grid snap', ortho: 'Ortho' }[k]} ${flags[k] ? 'on' : 'off'}`); update(); };
+const toggle = k => { flags[k] = !flags[k]; if (flags[k] && k === 'ortho') flags.polar = false; if (flags[k] && k === 'polar') flags.ortho = false; say(`${{ osnap: 'Object snap', gsnap: 'Grid snap', ortho: 'Ortho', polar: `Polar tracking (${polarInc}°)`, dyn: 'Dynamic input' }[k]} ${flags[k] ? 'on' : 'off'}`); update(); };
 const zoomCenter = f => { V().zoomAt(V().w / 2, V().h / 2, f); update(); };
 const actions = {
   'zoom-in': () => zoomCenter(1.25), 'zoom-out': () => zoomCenter(0.8),
   extents: () => { if (mode === 'layout') { fitSheet(); return update(); } const e = drawing.extents(); e ? vp.fit(e) : home(); update(); }, reset: () => { if (mode === 'layout') fitSheet(); else home(); update(); },
+  cut: () => copySel(true), copy: () => copySel(false), paste: pasteClip,
   'view-model': () => setMode('model'), 'view-layout': () => setMode('layout'), pdf: () => exportSheet('pdf'), svg: () => exportSheet('svg'),
   grid: () => { renderer.showGrid = !renderer.showGrid; $('btn-grid').classList.toggle('on', renderer.showGrid); update(); },
-  pan: () => setPan(!panTool), undo: () => doUndo(false), redo: () => doUndo(true), delete: deleteSel, osnap: () => toggle('osnap'), gsnap: () => toggle('gsnap'), ortho: () => toggle('ortho'),
+  pan: () => setPan(!panTool), polar: () => toggle('polar'), dyn: () => toggle('dyn'),
+  'panel-left': () => togglePanel('left'), 'panel-right': () => togglePanel('right'), 'panel-cmd': () => togglePanel('cmd'), 'panel-all': () => { const any = ui.left || ui.right || ui.cmd; ui.left = ui.right = ui.cmd = !any; applyUi(); }, undo: () => doUndo(false), redo: () => doUndo(true), delete: deleteSel, osnap: () => toggle('osnap'), gsnap: () => toggle('gsnap'), ortho: () => toggle('ortho'),
   'select-all': () => { setTool('select'); setSel(drawing.entities.filter(e => drawing.isSelectable(e)).map(e => e.id)); }, deselect: () => setSel([]),
   'units-mm': () => { drawing.units = 'mm'; $('units').textContent = 'mm'; markDirty(); }, 'units-m': () => { drawing.units = 'm'; $('units').textContent = 'm'; markDirty(); },
   dxfin: () => importDxfFile(), dxfout: () => exportDxfFile(), new: () => newDrawing(), open: () => openFile(), save: () => saveFile(false), saveas: () => saveFile(true),
@@ -191,6 +222,10 @@ function exec(c, arg) {
     if (!name) return say(`No block named "${nm}". Type BLOCKS to list them.`); if (!(sc > 0) || !Number.isFinite(ro)) return say('Usage: INSERT name [scale] [rotation°]');
     param.insert = { name, s: sc, rot: ro * Math.PI / 180 }; return setTool('insert'); }
   if (c === 'BLOCKS') return say('Blocks: ' + (Object.keys(drawing.blocks).join(', ') || '(none)'));
+  if (c === 'QTO') return quantitiesText(quantities(drawing)).forEach(say);
+  if (c === 'COORDS') return F.saveText(coordinatesCsv(drawing), 'coordinates.csv', null, true, 'csv').then(r => say(r ? `Exported ${r.name}.` : 'Export cancelled.')).catch(e => say(`Export failed: ${e.message}`));
+  if (c === 'CHAINAGE') { const [s = '0', i = '20'] = arg.split(/[\s,]+/), e = sel.size === 1 ? drawing.get([...sel][0]) : null; if (!e) return say('Select exactly one line or polyline, then CHAINAGE [start interval] (metres).');
+    let res; if (tx(() => { res = addChainage(drawing, e, { start: Number(s), interval: Number(i) }); })) { changed(); say(`Added ${res.marks} chainage marks along ${res.lengthM.toFixed(3)} m.`); } return; }
   if (c === 'LAYOUT') return setMode('layout'); if (c === 'MODEL') return setMode('model'); if (c === 'PDF') return exportSheet('pdf'); if (c === 'SVG') return exportSheet('svg');
   if (TOOL_OF[c]) { const t = TOOL_OF[c]; if (['offset', 'fillet', 'chamfer', 'text'].includes(t) && parseNumber(arg) !== null) { param[t] = +arg; arg = ''; } setTool(t); return arg && runCommand(arg); }
   const A = arg.toUpperCase();
@@ -204,6 +239,9 @@ function exec(c, arg) {
   if (c === 'AREA') return sel.size ? X.areaReport(drawing, [...sel]).forEach(say) : say('Select a closed polyline, rectangle or circle first.');
   if (c === 'PAN') { setPan(true); return say('Pan: drag with the mouse.'); }
   if (c === 'ZOOM') return A === '' || A === 'E' || A === 'EXTENTS' ? actions.extents() : A === 'IN' ? actions['zoom-in']() : A === 'OUT' ? actions['zoom-out']() : say('ZOOM options: E (extents), IN, OUT.');
+  if (c === 'POLAR') { if (A === '') return toggle('polar'); if (A === 'ON' || A === 'OFF') { if ((A === 'ON') !== flags.polar) toggle('polar'); return; }
+    const n = Number(arg); if (!(n > 0 && n <= 180)) return say('POLAR [ON|OFF|angle°], e.g. POLAR 15'); polarInc = n; flags.polar = true; flags.ortho = false; say(`Polar tracking on, every ${n}°.`); return update(); }
+  if (c === 'DYN') return toggle('dyn');
   if (c === 'ORTHO') return toggle('ortho');
   if (c === 'SNAP') return toggle('gsnap');
   if (c === 'OSNAP') {
@@ -218,7 +256,7 @@ function exec(c, arg) {
     try { drawing.current = (l || drawing.addLayer(arg)).name; say(`Current layer: ${drawing.current}${l ? '' : ' (created)'}`); } catch (e) { say(e.message); }
     return changed();
   }
-  if (c === 'HELP') say('Commands: LINE L, PLINE PL, CIRCLE C, ARC A, RECTANGLE REC, ERASE E, DIST DI, LAYER LA [name], ZOOM [E|IN|OUT], PAN, ORTHO, SNAP, OSNAP [modes]. Points: 100,200 · @50,0 · @100<45 · or a distance. Enter ends/repeats, Esc cancels. Modify: MOVE COPY ROTATE SCALE MIRROR OFFSET TRIM EXTEND FILLET CHAMFER EXPLODE JOIN ARRAY AREA UNDO REDO. Dimensions: DLI DAL DRA DDI. Not built: STRETCH, BREAK, DIMANGULAR, LEADER.');
+  if (c === 'HELP') say('Commands: LINE L, PLINE PL, CIRCLE C, ARC A, RECTANGLE REC, ERASE E, DIST DI, LAYER LA [name], ZOOM [E|IN|OUT], PAN, ORTHO, SNAP, OSNAP [modes]. Points: 100,200 · @50,0 · @100<45 · or a distance. Enter ends/repeats, Esc cancels. Modify: MOVE COPY ROTATE SCALE MIRROR OFFSET TRIM EXTEND FILLET CHAMFER EXPLODE JOIN ARRAY AREA UNDO REDO. Dimensions: DLI DAL DRA DDI. POINT, XLINE, RAY, BREAK, STRETCH, POLAR [angle], DYN. Not built: DIMANGULAR, LEADER, ELLIPSE, SPLINE.');
 }
 function runCommand(text) {
   const t = text.trim(); log('> ' + t);
@@ -273,18 +311,22 @@ addEventListener('keydown', e => {
   const typing = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT';
   if (e.key === 'F3') { e.preventDefault(); toggle('osnap'); } if (e.key === 'F7') { e.preventDefault(); actions.grid(); }
   if (e.key === 'F8') { e.preventDefault(); toggle('ortho'); } if (e.key === 'F9') { e.preventDefault(); toggle('gsnap'); }
+  if (e.key === 'F10') { e.preventDefault(); toggle('polar'); } if (e.key === 'F12') { e.preventDefault(); toggle('dyn'); }
+  if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); return actions['panel-all'](); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); return saveFile(e.shiftKey); }
+  if ((e.ctrlKey || e.metaKey) && !typing && 'cxv'.includes(e.key.toLowerCase())) { e.preventDefault(); return { c: () => copySel(false), x: () => copySel(true), v: pasteClip }[e.key.toLowerCase()](); }
   if ((e.ctrlKey || e.metaKey) && !typing && 'zy'.includes(e.key.toLowerCase())) { e.preventDefault(); return doUndo(e.key.toLowerCase() === 'y' || e.shiftKey); }
   if (typing) return;
   if (e.code === 'Space') space = true;
   if (e.key === 'Escape') { pts = []; box = null; selStart = null; if (tool === 'select') setSel([]); else { say(P(tool, 0)); update(); } }
   else if (e.key === 'Delete') deleteSel();
   else if (e.key === 'Enter' && tool !== 'select') finish();
-  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.code !== 'Space') cin.focus(); // type-to-command
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.code !== 'Space') { if (!ui.cmd) { ui.cmd = true; applyUi(); } cin.focus(); } // type-to-command
 });
 addEventListener('keyup', e => { if (e.code === 'Space') space = false; });
 addEventListener('resize', () => { renderer.resize(); lvp.resize(vp.w, vp.h); update(); });
+new ResizeObserver(() => { renderer.resize(); lvp.resize(vp.w, vp.h); update(); }).observe(canvas);   // panels hiding/showing changes the canvas size
 
 $('btn-grid').classList.add('on');
-renderer.resize(); home(); setTool('select'); layers.render(); blocksUI.render(); panel.render();
+applyUi(false); renderer.resize(); home(); setTool('select'); layers.render(); blocksUI.render(); panel.render();
 log('EVLab CAD ready. Type HELP for commands.'); updateTitle(); recover();

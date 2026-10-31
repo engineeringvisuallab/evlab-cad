@@ -6,6 +6,9 @@ export function strokeEntity(ctx, vp, e) {
   else if (e.type === 'polyline') { e.pts.forEach(([x, y], i) => { const p = S(x, y); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }); if (e.closed) ctx.closePath(); }
   else if (e.type === 'circle') { const c = S(e.cx, e.cy); ctx.arc(c.x, c.y, e.r * vp.scale, 0, TAU); }
   else if (e.type === 'arc') { const c = S(e.cx, e.cy); ctx.arc(c.x, c.y, e.r * vp.scale, -e.a0, -e.a1, true); } // Y flip => negate angles
+  else if (e.type === 'point') { const p = S(e.x, e.y); ctx.moveTo(p.x - 5, p.y); ctx.lineTo(p.x + 5, p.y); ctx.moveTo(p.x, p.y - 5); ctx.lineTo(p.x, p.y + 5); ctx.moveTo(p.x + 3, p.y); ctx.arc(p.x, p.y, 3, 0, TAU); }
+  else if (e.type === 'xline' || e.type === 'ray') { const R = Math.hypot(vp.w, vp.h) / vp.scale + Math.hypot(e.x - vp.cx, e.y - vp.cy), c = Math.cos(e.a) * R, s = Math.sin(e.a) * R, x = e.type === 'xline';
+    const a = S(x ? e.x - c : e.x, x ? e.y - s : e.y), b = S(e.x + c, e.y + s); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
   ctx.stroke();
 }
 export function drawTextAt(ctx, sx, sy, px, rot, str, center) {

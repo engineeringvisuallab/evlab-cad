@@ -26,6 +26,8 @@ export function exportDxf(d) {
     else if (e.type === 'circle') E('CIRCLE', layer, e, () => { w(ent, 100, 'AcDbCircle'); w(ent, 10, e.cx); w(ent, 20, e.cy); w(ent, 30, 0); w(ent, 40, e.r); });
     else if (e.type === 'arc') E('ARC', layer, e, () => { w(ent, 100, 'AcDbCircle'); w(ent, 10, e.cx); w(ent, 20, e.cy); w(ent, 30, 0); w(ent, 40, e.r); w(ent, 100, 'AcDbArc'); w(ent, 50, norm(e.a0) * DEG); w(ent, 51, norm(e.a1) * DEG); });
     else if (e.type === 'text') textE(layer, e);
+    else if (e.type === 'point') E('POINT', layer, e, () => { w(ent, 100, 'AcDbPoint'); w(ent, 10, e.x); w(ent, 20, e.y); w(ent, 30, 0); });
+    else if (e.type === 'xline' || e.type === 'ray') E(e.type === 'xline' ? 'XLINE' : 'RAY', layer, e, () => { w(ent, 100, e.type === 'xline' ? 'AcDbXline' : 'AcDbRay'); w(ent, 10, e.x); w(ent, 20, e.y); w(ent, 30, 0); w(ent, 11, Math.cos(e.a)); w(ent, 21, Math.sin(e.a)); w(ent, 31, 0); });
   };
   let dims = 0, inserts = 0;
   for (const e of d.entities) {

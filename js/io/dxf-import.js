@@ -54,6 +54,8 @@ export function importDxf(text) {
         const fl = fnum(g, 70, 0);
         if (fl & (8 | 16 | 64)) skip(type, '3D polyline or mesh'); else if (vs.some(q => Math.abs(fnum(q, 42, 0)) > 1e-12)) skip(type, 'bulge arcs'); else if (flipped(g)) skip(type, 'extrusion direction');
         else add('POLYLINE', g, make.polyline(vs.map(q => [fnum(q, 10, 0), fnum(q, 20, 0)]), !!(fl & 1)));
+      } else if (type === 'POINT') { z3(g); add('POINT', g, { type: 'point', x: fnum(g, 10, 0), y: fnum(g, 20, 0) });
+      } else if (type === 'XLINE' || type === 'RAY') { add(type, g, { type: type === 'XLINE' ? 'xline' : 'ray', x: fnum(g, 10, 0), y: fnum(g, 20, 0), a: Math.atan2(fnum(g, 21, 0), fnum(g, 11, 1)) });
       } else if (type === 'TEXT' || type === 'MTEXT') {
         if (flipped(g)) { skip(type, 'extrusion direction'); continue; }
         if (type === 'TEXT') {

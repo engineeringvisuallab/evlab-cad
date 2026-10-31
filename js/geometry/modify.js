@@ -58,6 +58,41 @@ export function corner(d, id1, id2, c1, c2, kind, val = 0) {
     const arc = norm(e2 - s) < Math.PI ? make.arc(C[0], C[1], val, s, e2) : make.arc(C[0], C[1], val, e2, s); d.add({ ...arc, layer: a.layer, color: a.color });
   } else if (kind === 'chamfer') d.add({ ...make.line(T1[0], T1[1], T2[0], T2[1]), layer: a.layer, color: a.color });
 }
+export function breakEntity(d, id, p1, p2) {
+  const e = d.get(id), keep = { layer: e?.layer, color: e?.color };
+  if (e?.type === 'line') {
+    const dx = e.x2 - e.x1, dy = e.y2 - e.y1, L2 = dx * dx + dy * dy, t = p => Math.max(0, Math.min(1, ((p.x - e.x1) * dx + (p.y - e.y1) * dy) / L2));
+    let a = t(p1), b = t(p2); if (a > b) [a, b] = [b, a]; if (b - a < 1e-9) throw new Error('The two break points are the same.');
+    const at = u => [e.x1 + u * dx, e.y1 + u * dy], cut = []; if (a > 1e-9) cut.push([0, a]); if (b < 1 - 1e-9) cut.push([b, 1]);
+    if (!cut.length) throw new Error('That would remove the whole line. Use ERASE.');
+    const segs = cut.map(([u, v]) => [...at(u), ...at(v)]); Object.assign(e, { x1: segs[0][0], y1: segs[0][1], x2: segs[0][2], y2: segs[0][3] });
+    segs.slice(1).forEach(s => d.add({ ...make.line(...s), ...keep })); return;
+  }
+  if (e?.type === 'circle') {
+    const a1 = Math.atan2(p1.y - e.cy, p1.x - e.cx), a2 = Math.atan2(p2.y - e.cy, p2.x - e.cx); if (norm(a1 - a2) < 1e-9) throw new Error('The two break points are the same.');
+    d.remove([id]); d.add({ ...make.arc(e.cx, e.cy, e.r, a2, a1), ...keep }); return;   // the part counter-clockwise from point 1 to point 2 is removed
+  }
+  if (e?.type === 'arc') {
+    const sw = norm(e.a1 - e.a0), sp = p => Math.min(sw, norm(Math.atan2(p.y - e.cy, p.x - e.cx) - e.a0)); let a = sp(p1), b = sp(p2); if (a > b) [a, b] = [b, a];
+    if (b - a < 1e-9) throw new Error('The two break points are the same.'); const cut = []; if (a > 1e-9) cut.push([0, a]); if (b < sw - 1e-9) cut.push([b, sw]);
+    if (!cut.length) throw new Error('That would remove the whole arc. Use ERASE.'); const a0 = e.a0, arcs = cut.map(([u, v]) => [a0 + u, a0 + v]);
+    e.a0 = arcs[0][0]; e.a1 = arcs[0][1]; arcs.slice(1).forEach(([s, f]) => d.add({ ...make.arc(e.cx, e.cy, e.r, s, f), ...keep })); return;
+  }
+  throw new Error('BREAK works on lines, arcs and circles. EXPLODE polylines first.');
+}
+// STRETCH: points inside the crossing window move by (dx,dy); objects with one point (circle centre, text, block, point) move whole if that point is inside. Dimensions are not stretched.
+export function stretchWindow(d, a, b, dx, dy) {
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y), inn = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1; let n = 0;
+  for (const e of d.entities) {
+    if (!d.isSelectable(e)) continue; const c = structuredClone(e); let hit = false;
+    if (e.type === 'line') { if (inn(e.x1, e.y1)) { c.x1 += dx; c.y1 += dy; hit = true; } if (inn(e.x2, e.y2)) { c.x2 += dx; c.y2 += dy; hit = true; } }
+    else if (e.type === 'polyline') c.pts = e.pts.map(p => inn(p[0], p[1]) ? (hit = true, [p[0] + dx, p[1] + dy]) : p);
+    else if (e.type === 'circle' || e.type === 'arc') { if (inn(e.cx, e.cy)) { c.cx += dx; c.cy += dy; hit = true; } }
+    else if (['text', 'insert', 'point', 'xline', 'ray'].includes(e.type)) { if (inn(e.x, e.y)) { c.x += dx; c.y += dy; hit = true; } }
+    if (!hit) continue; const err = validate(c); if (err) throw new Error(err); Object.assign(e, c); n++;
+  }
+  if (!n) throw new Error('No object has a point inside the crossing window.'); return n;
+}
 export function explodeIds(d, ids) {
   let n = 0; for (const id of ids) { const e = d.get(id); if (e?.type === 'insert') { expand(d, e).forEach(p => d.add({ ...p, layer: e.layer })); d.remove([id]); n++; continue; } if (e?.type !== 'polyline') continue;
     segments(e).forEach(s => d.add({ ...make.line(...s), layer: e.layer, color: e.color })); d.remove([id]); n++; }

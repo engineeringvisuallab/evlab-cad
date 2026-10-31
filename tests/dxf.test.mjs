@@ -35,8 +35,8 @@ let r = importDxf(r12); assert.equal(r.entities.length, 1); assert.ok(r.entities
 const mixed = pairs(['0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC', '0', 'SECTION', '2', 'ENTITIES',
   '0', 'POINT', '8', '0', '10', '1', '20', '1', '0', 'ELLIPSE', '8', '0', '10', '0', '20', '0', '0', 'LWPOLYLINE', '8', '0', '90', '2', '70', '0', '10', '0', '20', '0', '42', '0.5', '10', '1', '20', '0',
   '0', 'CIRCLE', '8', '0', '10', '0', '20', '0', '40', '2', '210', '0', '220', '0', '230', '-1', '0', 'LINE', '8', '0', '10', '0', '20', '0', '30', '5', '11', '1', '21', '1', '31', '0', '0', 'ENDSEC', '0', 'EOF']);
-r = importDxf(mixed); assert.equal(r.entities.length, 1); assert.equal(r.units, 'mm'); const msg = r.warnings.join(' ');
-for (const k of ['POINT', 'ELLIPSE', 'bulge', 'extrusion', 'Z']) assert.ok(msg.includes(k), k);
+r = importDxf(mixed); assert.equal(r.entities.length, 2); assert.deepEqual(r.entities.map(e => e.type), ['point', 'line']); assert.equal(r.units, 'mm'); const msg = r.warnings.join(' ');
+for (const k of ['ELLIPSE', 'bulge', 'extrusion', 'Z']) assert.ok(msg.includes(k), k); assert.ok(!msg.includes('POINT'));
 // ---- ACI colours and rejections
 assert.equal(aciToHex(1), '#ff0000'); assert.equal(aciToHex(7), '#e8eef2'); assert.equal(aciToHex(250), '#333333'); assert.equal(aciToHex(10), '#ff0000'); assert.equal(aciToHex(256), null);
 assert.equal(hexToAci('#ff0010'), 1); assert.equal(hexToAci('#e8eef2'), 7);

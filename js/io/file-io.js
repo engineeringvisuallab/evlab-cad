@@ -1,4 +1,4 @@
-const KINDS = { pdf: { description: 'PDF document', accept: { 'application/pdf': ['.pdf'] }, ext: '.pdf' }, svg: { description: 'SVG image', accept: { 'image/svg+xml': ['.svg'] }, ext: '.svg' }, project: { description: 'EVLab CAD project', accept: { 'application/json': ['.evlab', '.json'] }, ext: '.evlab,.json' }, dxf: { description: 'DXF drawing', accept: { 'application/dxf': ['.dxf'] }, ext: '.dxf' } };
+const KINDS = { csv: { description: 'CSV file', accept: { 'text/csv': ['.csv', '.txt'] }, ext: '.csv,.txt' }, pdf: { description: 'PDF document', accept: { 'application/pdf': ['.pdf'] }, ext: '.pdf' }, svg: { description: 'SVG image', accept: { 'image/svg+xml': ['.svg'] }, ext: '.svg' }, project: { description: 'EVLab CAD project', accept: { 'application/json': ['.evlab', '.json'] }, ext: '.evlab,.json' }, dxf: { description: 'DXF drawing', accept: { 'application/dxf': ['.dxf'] }, ext: '.dxf' } };
 export async function saveText(text, name, handle, forceNew, kind = 'project') {
   const k = KINDS[kind];
   if (window.showSaveFilePicker) {
