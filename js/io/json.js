@@ -1,7 +1,7 @@
 import { validate } from '../core/entity.js';
 import { defaultLayout, validateLayout } from '../layouts/paper-space.js';
 export const FORMAT = 'evlab-cad', VERSION = 2;
-const LAYER_DEFAULTS = { color: '#e8eef2', lineType: 'Continuous', lineWeight: 0.25, visible: true, locked: false, frozen: false, plot: true };
+const LAYER_DEFAULTS = { color: '#e8eef2', lineType: 'CONTINUOUS', lineWeight: 0.25, visible: true, locked: false, frozen: false, plot: true };
 export const serialize = (d, meta = {}) => JSON.stringify({ format: FORMAT, version: VERSION, meta, units: d.units, dimStyle: d.dimStyle, blocks: d.blocks, layout: d.layout, current: d.current, nextId: d.nextId, layers: d.layers, entities: d.entities }, null, 1);
 // Validates everything before anything is applied, so a bad file can never replace the open drawing.
 export function parse(text) {

@@ -12,7 +12,7 @@ export function exportPdf(sheet) {
   const ops = ['0 G 0 g 1 J 1 j'];
   for (const it of sheet.items) {
     ops.push('q'); if (it.clip) { const c = sheet.clip; ops.push(`${f(c.x * PT)} ${f(c.y * PT)} ${f(c.w * PT)} ${f(c.h * PT)} re W n`); }
-    ops.push(`${f((it.lw || 0.25) * PT)} w`);
+    ops.push(`${f((it.lw || 0.25) * PT)} w`); if (it.dash) ops.push(`[${it.dash.map(v => f(v * PT)).join(' ')}] 0 d`);
     if (it.t === 'line') ops.push(`${f(it.x1 * PT)} ${f(it.y1 * PT)} m ${f(it.x2 * PT)} ${f(it.y2 * PT)} l S`);
     else if (it.t === 'poly') ops.push(it.pts.map((p, i) => `${f(p[0] * PT)} ${f(p[1] * PT)} ${i ? 'l' : 'm'}`).join(' ') + (it.closed ? ' h' : '') + (it.fill ? ' B' : ' S'));
     else if (it.t === 'circle') ops.push(...arcOps(it.cx, it.cy, it.r, 0, 2 * Math.PI), 'h S');

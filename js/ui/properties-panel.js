@@ -7,12 +7,15 @@ const FIELDS = {
   circle: [['Center X', e => e.cx, (e, v) => e.cx = v], ['Center Y', e => e.cy, (e, v) => e.cy = v], ['Radius', e => e.r, (e, v) => e.r = v], ['Diameter', e => e.r * 2, (e, v) => e.r = v / 2]],
   arc: [['Center X', e => e.cx, (e, v) => e.cx = v], ['Center Y', e => e.cy, (e, v) => e.cy = v], ['Radius', e => e.r, (e, v) => e.r = v], ['Diameter', e => e.r * 2, (e, v) => e.r = v / 2],
     ['Start °', e => norm(e.a0) * D, (e, v) => e.a0 = v * R], ['End °', e => norm(e.a1) * D, (e, v) => e.a1 = v * R]],
-  polyline: [], dim: [],
+  polyline: [], dim: [], point: [['X', e => e.x, (e, v) => e.x = v], ['Y', e => e.y, (e, v) => e.y = v]],
+  xline: [['Base X', e => e.x, (e, v) => e.x = v], ['Base Y', e => e.y, (e, v) => e.y = v], ['Angle °', e => norm(e.a) * D, (e, v) => e.a = v * R]],
+  ray: [['Start X', e => e.x, (e, v) => e.x = v], ['Start Y', e => e.y, (e, v) => e.y = v], ['Angle °', e => norm(e.a) * D, (e, v) => e.a = v * R]],
   text: [['X', e => e.x, (e, v) => e.x = v], ['Y', e => e.y, (e, v) => e.y = v], ['Height', e => e.h, (e, v) => e.h = v], ['Rotation °', e => norm(e.rot) * D, (e, v) => e.rot = v * R]],
   insert: [['Insert X', e => e.x, (e, v) => e.x = v], ['Insert Y', e => e.y, (e, v) => e.y = v], ['Scale', e => e.s, (e, v) => e.s = v], ['Rotation °', e => norm(e.rot) * D, (e, v) => e.rot = v * R]],
 };
 const fmt = v => String(+v.toFixed(6));
 import { resolveDim } from '../geometry/dimensions.js';
+import { LTYPE_NAMES } from '../geometry/linetypes.js';
 export function createPanel(root, drawing, getSel, onChange, say, tx) {
   function render() {
     const ents = getSel().map(id => drawing.get(id)).filter(Boolean);
@@ -38,10 +41,13 @@ export function createPanel(root, drawing, getSel, onChange, say, tx) {
     if (e.type === 'insert') h(`<span>Block</span><b>${e.block}</b>`);
     if (e.type === 'polyline') { h(`<span>Vertices</span><b>${e.pts.length}</b>`); h(`<span>Closed</span><b>${e.closed ? 'yes' : 'no'}</b>`); }
     if (e.type === 'dim') { const g = resolveDim(drawing, e); h(`<span>Kind</span><b>${e.dtype}${e.ref ? ' (follows its object)' : ' (fixed points)'}</b>`); h(`<span>Value</span><b>${g ? g.text.str : 'reference lost'}</b>`); }
-    else if (e.type !== 'text' && e.type !== 'insert') h(`<span>${e.type === 'circle' ? 'Circumference' : 'Total length'}</span><b>${fmt(length(e))}</b>`);
+    else if (!['text', 'insert', 'point', 'xline', 'ray'].includes(e.type)) h(`<span>${e.type === 'circle' ? 'Circumference' : 'Total length'}</span><b>${fmt(length(e))}</b>`);
     const lr = h('<span>Layer</span>'), sl = document.createElement('select');
     drawing.layers.forEach(l => sl.add(new Option(l.name, l.name, false, l.name === e.layer)));
     sl.addEventListener('change', () => { tx(() => { e.layer = sl.value; }); onChange(); render(); }); lr.appendChild(sl);
+    const lr2 = h('<span>Linetype</span>'), s2 = document.createElement('select');
+    ['BYLAYER', ...LTYPE_NAMES].forEach(n => s2.add(new Option(n, n, false, n === (e.lineType || 'BYLAYER'))));
+    s2.addEventListener('change', () => { tx(() => { if (s2.value === 'BYLAYER') delete e.lineType; else e.lineType = s2.value; }); onChange(); render(); }); lr2.appendChild(s2);
     h(`<span>Color</span><b>${e.color === 'BYLAYER' ? 'by layer' : e.color}</b>`);
   }
   return { render };

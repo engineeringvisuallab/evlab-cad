@@ -1,5 +1,6 @@
 import { make, validate } from '../core/entity.js';
 import { aciToHex, intToHex, DEFAULT_HEX } from './dxf-common.js';
+import { canon } from '../geometry/linetypes.js';
 const RAD = Math.PI / 180;
 export function readPairs(text) {
   if (/^\s*AutoCAD Binary DXF/.test(text)) throw new Error('Binary DXF is not supported. Save the drawing as ASCII DXF.');
@@ -22,20 +23,21 @@ export function importDxf(text) {
   const sec = sections(readPairs(text)), warnings = [], skipped = {}, done = {}, skip = (t, why) => { const k = why ? `${t} (${why})` : t; skipped[k] = (skipped[k] || 0) + 1; };
   let units = 'mm'; const hd = sec.HEADER || [];
   for (let i = 0; i < hd.length - 1; i++) if (hd[i][0] === 9 && hd[i][1] === '$INSUNITS') { const u = Number(hd[i + 1][1]); if (u === 6) units = 'm'; else if (u !== 4 && u !== 0) warnings.push(`Drawing units code ${u} is not supported; treated as millimetres. Check the scale.`); }
-  const layers = [], byLower = new Map(), mk = (name, extra = {}) => { const l = { name, color: DEFAULT_HEX, lineType: 'Continuous', lineWeight: 0.25, visible: true, locked: false, frozen: false, plot: true, ...extra }; layers.push(l); byLower.set(name.toLowerCase(), l); return l; };
+  const layers = [], byLower = new Map(), mk = (name, extra = {}) => { const l = { name, color: DEFAULT_HEX, lineType: 'CONTINUOUS', lineWeight: 0.25, visible: true, locked: false, frozen: false, plot: true, ...extra }; layers.push(l); byLower.set(name.toLowerCase(), l); return l; };
   let ltypes = 0;
   for (const r of records(sec.TABLES || [])) if (r.type === 'LAYER') { const name = first(r.g, 2); if (!name || byLower.has(name.toLowerCase())) continue;
     const c = fnum(r.g, 62, 7), tc = first(r.g, 420), flags = fnum(r.g, 70, 0), lw = fnum(r.g, 370, -3), lt = first(r.g, 6);
-    if (lt && lt.toUpperCase() !== 'CONTINUOUS') ltypes++;
-    mk(name, { color: tc !== undefined ? intToHex(+tc) : aciToHex(c) || DEFAULT_HEX, visible: c >= 0, frozen: !!(flags & 1), locked: !!(flags & 4), plot: first(r.g, 290) !== '0', lineWeight: lw > 0 ? lw / 100 : 0.25 }); }
-  if (ltypes) warnings.push(`${ltypes} layer(s) use line types other than CONTINUOUS; the line type names were not imported.`);
+    if (lt && !canon(lt)) ltypes++;
+    mk(name, { lineType: canon(lt) || 'CONTINUOUS', color: tc !== undefined ? intToHex(+tc) : aciToHex(c) || DEFAULT_HEX, visible: c >= 0, frozen: !!(flags & 1), locked: !!(flags & 4), plot: first(r.g, 290) !== '0', lineWeight: lw > 0 ? lw / 100 : 0.25 }); }
+  if (ltypes) warnings.push(`${ltypes} layer(s) use line types EVLab does not have; they were imported as Continuous.`);
   if (!byLower.has('0')) mk('0'); layers.sort((a, b) => (a.name === '0' ? -1 : b.name === '0' ? 1 : 0));
-  const ents = []; let flat = 0, n = 1, aligned_n = 0, mtext = 0;
+  const ents = []; let flat = 0, n = 1, aligned_n = 0, mtext = 0, entLt = 0;
+  const ltOf = g => { const t = first(g, 6); if (!t || /^BY(LAYER|BLOCK)$/i.test(t)) return {}; const c = canon(t); if (!c) { entLt++; return {}; } return { lineType: c }; };
   const layerOf = g => { const nm = first(g, 8) || '0'; return (byLower.get(nm.toLowerCase()) || mk(nm)).name; };
   const colorOf = g => { const tc = first(g, 420); if (tc !== undefined) return intToHex(+tc); const c = fnum(g, 62, 256); return c > 0 && c < 256 ? aciToHex(c) || 'BYLAYER' : 'BYLAYER'; };
   const z3 = g => { if ([30, 31].some(c => Math.abs(fnum(g, c, 0)) > 1e-12)) flat++; };
   const flipped = g => Math.abs(fnum(g, 230, 1) - 1) > 1e-9 || Math.abs(fnum(g, 210, 0)) > 1e-9 || Math.abs(fnum(g, 220, 0)) > 1e-9;
-  const add = (type, g, geo) => { const e = { id: 'E' + n, layer: layerOf(g), color: colorOf(g), ...geo }, err = validate(e); if (err) return skip(type, 'invalid geometry'); n++; ents.push(e); done[type] = (done[type] || 0) + 1; };
+  const add = (type, g, geo) => { const e = { id: 'E' + n, layer: layerOf(g), color: colorOf(g), ...ltOf(g), ...geo }, err = validate(e); if (err) return skip(type, 'invalid geometry'); n++; ents.push(e); done[type] = (done[type] || 0) + 1; };
   const verts = (list, closedFlag) => { const v = list.filter(p => p).map(p => [p.x, p.y]); return { pts: v, closed: closedFlag }; };
   const recs = records(sec.ENTITIES || []);
   for (let i = 0; i < recs.length; i++) {
@@ -54,6 +56,8 @@ export function importDxf(text) {
         const fl = fnum(g, 70, 0);
         if (fl & (8 | 16 | 64)) skip(type, '3D polyline or mesh'); else if (vs.some(q => Math.abs(fnum(q, 42, 0)) > 1e-12)) skip(type, 'bulge arcs'); else if (flipped(g)) skip(type, 'extrusion direction');
         else add('POLYLINE', g, make.polyline(vs.map(q => [fnum(q, 10, 0), fnum(q, 20, 0)]), !!(fl & 1)));
+      } else if (type === 'POINT') { z3(g); add('POINT', g, { type: 'point', x: fnum(g, 10, 0), y: fnum(g, 20, 0) });
+      } else if (type === 'XLINE' || type === 'RAY') { add(type, g, { type: type === 'XLINE' ? 'xline' : 'ray', x: fnum(g, 10, 0), y: fnum(g, 20, 0), a: Math.atan2(fnum(g, 21, 0), fnum(g, 11, 1)) });
       } else if (type === 'TEXT' || type === 'MTEXT') {
         if (flipped(g)) { skip(type, 'extrusion direction'); continue; }
         if (type === 'TEXT') {
@@ -68,6 +72,7 @@ export function importDxf(text) {
       } else if (type !== 'VERTEX' && type !== 'SEQEND') skip(type);
     } catch (e) { skip(type, e.message); }
   }
+  if (entLt) warnings.push(`${entLt} object(s) use line types EVLab does not have; they follow their layer instead.`);
   if (flat) warnings.push(`${flat} object(s) had non-zero Z coordinates; Z was dropped (2D drawing).`);
   if (aligned_n) warnings.push(`${aligned_n} text object(s) use alignments other than left/centre; placed approximately.`);
   if (mtext) warnings.push(`${mtext} MTEXT object(s) imported with simplified formatting (no wrapping, fonts or colours inside the text).`);

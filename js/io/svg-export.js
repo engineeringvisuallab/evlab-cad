@@ -4,7 +4,7 @@ const n = v => String(+v.toFixed(3)), esc = s => s.replace(/&/g, '&amp;').replac
 export function exportSvg(sheet) {
   const { W, H } = sheet, y = v => n(H - v), c = sheet.clip, out = [];
   for (const it of sheet.items) {
-    const at = `stroke-width="${n(it.lw || 0.25)}"${it.clip ? ' clip-path="url(#vp)"' : ''}`; let el = '';
+    const at = `stroke-width="${n(it.lw || 0.25)}"${it.dash ? ` stroke-dasharray="${it.dash.map(n).join(' ')}"` : ''}${it.clip ? ' clip-path="url(#vp)"' : ''}`; let el = '';
     if (it.t === 'line') el = `<line x1="${n(it.x1)}" y1="${y(it.y1)}" x2="${n(it.x2)}" y2="${y(it.y2)}" ${at}/>`;
     else if (it.t === 'poly') el = `<${it.closed ? 'polygon' : 'polyline'} points="${it.pts.map(p => n(p[0]) + ',' + y(p[1])).join(' ')}" ${it.fill ? 'fill="#000" ' : ''}${at}/>`;
     else if (it.t === 'circle') el = `<circle cx="${n(it.cx)}" cy="${y(it.cy)}" r="${n(it.r)}" ${at}/>`;

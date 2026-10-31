@@ -1,1 +1,2 @@
-{"type":"module"}
+{ "name": "evlab-cad", "version": "0.10.0", "private": true, "type": "module", "license": "MIT",
+  "scripts": { "test": "node tests/run-all.mjs", "start": "node serve.mjs" } }

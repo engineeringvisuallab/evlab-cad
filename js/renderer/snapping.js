@@ -20,6 +20,7 @@ export function snapPoint(ents, p, tol, modes, last) {
       else if (isArc) { add(e.cx + e.r * Math.cos(e.a0), e.cy + e.r * Math.sin(e.a0), 'end'); add(e.cx + e.r * Math.cos(e.a1), e.cy + e.r * Math.sin(e.a1), 'end'); } }
     if (modes.mid) { segs.forEach(s => add((s[0] + s[2]) / 2, (s[1] + s[3]) / 2, 'mid'));
       if (isArc) { const m = e.a0 + norm(e.a1 - e.a0) / 2; add(e.cx + e.r * Math.cos(m), e.cy + e.r * Math.sin(m), 'mid'); } }
+    if (modes.nod && e.type === 'point') add(e.x, e.y, 'nod');
     if (modes.cen && isRound) add(e.cx, e.cy, 'cen');
     if (modes.per && last) { segs.forEach(s => { const f = foot(last.x, last.y, s); if (f.t >= 0 && f.t <= 1) add(f.x, f.y, 'per'); });
       if (isRound) { const q = onCircle(e, last); if (!isArc || inSweep(Math.atan2(q.y - e.cy, q.x - e.cx), e.a0, e.a1)) add(q.x, q.y, 'per'); } }

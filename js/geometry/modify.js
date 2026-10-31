@@ -1,4 +1,4 @@
-import { make, dist, norm, validate, segments, length, TAU } from '../core/entity.js';
+import { make, dist, norm, validate, segments, length, segDist, TAU } from '../core/entity.js';
 import { segSeg } from '../renderer/snapping.js';
 import * as TF from './transforms.js';
 import { expand } from './expand.js';
@@ -9,12 +9,27 @@ export function transformIds(d, ids, T, copy) {
     if (copy) { const { id: _, ...rest } = t; d.add(rest); } else Object.assign(e, t);
   }
 }
+// Mitred polyline offset (open or closed). Very sharp corners are bevelled; an offset so large that a segment would flip is refused.
+function offsetPolyline(e, dd, side) {
+  const P = e.pts, n = P.length, segs = e.closed ? n : n - 1, seg = i => [P[i], P[(i + 1) % n]]; let bi = 0, bd = Infinity;
+  for (let i = 0; i < segs; i++) { const [a, b] = seg(i), s = segDist(side.x, side.y, a[0], a[1], b[0], b[1]); if (s < bd) { bd = s; bi = i; } }
+  const unit = i => { const [a, b] = seg(i), L = Math.hypot(b[0] - a[0], b[1] - a[1]); return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+  const [ux, uy] = unit(bi), a0 = seg(bi)[0], h = ((side.x - a0[0]) * -uy + (side.y - a0[1]) * ux) < 0 ? -dd : dd;
+  const lines = Array.from({ length: segs }, (_, i) => { const [a, b] = seg(i), [x, y] = unit(i); return { p: [a[0] - y * h, a[1] + x * h], q: [b[0] - y * h, b[1] + x * h], u: [x, y] }; });
+  const join = (A, B) => { const den = A.u[0] * B.u[1] - A.u[1] * B.u[0]; if (Math.abs(den) < 1e-9) return Math.abs(A.q[0] - B.p[0]) + Math.abs(A.q[1] - B.p[1]) < 1e-9 ? [A.q] : [A.q, B.p];
+    const t = ((B.p[0] - A.p[0]) * B.u[1] - (B.p[1] - A.p[1]) * B.u[0]) / den, m = [A.p[0] + t * A.u[0], A.p[1] + t * A.u[1]]; return Math.hypot(m[0] - A.q[0], m[1] - A.q[1]) > 8 * dd ? [A.q, B.p] : [m]; };
+  const out = [], st = Array(segs), en = Array(segs), put = (pv, nx) => { const j = join(lines[pv], lines[nx]); out.push(j[0]); if (j.length === 1) en[pv] = st[nx] = out.length - 1; else { en[pv] = out.length - 1; out.push(j[1]); st[nx] = out.length - 1; } };
+  if (e.closed) for (let i = 0; i < n; i++) put((i - 1 + n) % n, i); else { out.push(lines[0].p); st[0] = 0; for (let i = 1; i < segs; i++) put(i - 1, i); out.push(lines[segs - 1].q); en[segs - 1] = out.length - 1; }
+  for (let i = 0; i < segs; i++) if ((out[en[i]][0] - out[st[i]][0]) * lines[i].u[0] + (out[en[i]][1] - out[st[i]][1]) * lines[i].u[1] <= 1e-9) throw new Error('The offset distance is too large for this polyline.');
+  return make.polyline(out, !!e.closed);
+}
 export function offsetEntity(e, dd, side) {
+  if (e.type === 'polyline') return offsetPolyline(e, dd, side);
   if (e.type === 'line') { const dx = e.x2 - e.x1, dy = e.y2 - e.y1, L = Math.hypot(dx, dy), nx = -dy / L, ny = dx / L, s = (side.x - e.x1) * nx + (side.y - e.y1) * ny < 0 ? -1 : 1;
     return make.line(e.x1 + nx * s * dd, e.y1 + ny * s * dd, e.x2 + nx * s * dd, e.y2 + ny * s * dd); }
   if (e.type === 'circle' || e.type === 'arc') { const r = dist(side.x, side.y, e.cx, e.cy) > e.r ? e.r + dd : e.r - dd;
     if (r <= 0) throw new Error('Offset would make the radius zero or negative.'); return { ...e, r }; }
-  throw new Error('OFFSET supports lines, circles and arcs. Polyline offset is not implemented.');
+  throw new Error('OFFSET supports lines, circles, arcs and polylines.');
 }
 const cutters = (d, e) => d.shapes(x => x.id !== e.id && d.isVisible(x)).flatMap(segments);
 export function trimLine(d, e, p) {
@@ -57,6 +72,41 @@ export function corner(d, id1, id2, c1, c2, kind, val = 0) {
     const s = Math.atan2(T1[1] - C[1], T1[0] - C[0]), e2 = Math.atan2(T2[1] - C[1], T2[0] - C[0]);
     const arc = norm(e2 - s) < Math.PI ? make.arc(C[0], C[1], val, s, e2) : make.arc(C[0], C[1], val, e2, s); d.add({ ...arc, layer: a.layer, color: a.color });
   } else if (kind === 'chamfer') d.add({ ...make.line(T1[0], T1[1], T2[0], T2[1]), layer: a.layer, color: a.color });
+}
+export function breakEntity(d, id, p1, p2) {
+  const e = d.get(id), keep = { layer: e?.layer, color: e?.color };
+  if (e?.type === 'line') {
+    const dx = e.x2 - e.x1, dy = e.y2 - e.y1, L2 = dx * dx + dy * dy, t = p => Math.max(0, Math.min(1, ((p.x - e.x1) * dx + (p.y - e.y1) * dy) / L2));
+    let a = t(p1), b = t(p2); if (a > b) [a, b] = [b, a]; if (b - a < 1e-9) throw new Error('The two break points are the same.');
+    const at = u => [e.x1 + u * dx, e.y1 + u * dy], cut = []; if (a > 1e-9) cut.push([0, a]); if (b < 1 - 1e-9) cut.push([b, 1]);
+    if (!cut.length) throw new Error('That would remove the whole line. Use ERASE.');
+    const segs = cut.map(([u, v]) => [...at(u), ...at(v)]); Object.assign(e, { x1: segs[0][0], y1: segs[0][1], x2: segs[0][2], y2: segs[0][3] });
+    segs.slice(1).forEach(s => d.add({ ...make.line(...s), ...keep })); return;
+  }
+  if (e?.type === 'circle') {
+    const a1 = Math.atan2(p1.y - e.cy, p1.x - e.cx), a2 = Math.atan2(p2.y - e.cy, p2.x - e.cx); if (norm(a1 - a2) < 1e-9) throw new Error('The two break points are the same.');
+    d.remove([id]); d.add({ ...make.arc(e.cx, e.cy, e.r, a2, a1), ...keep }); return;   // the part counter-clockwise from point 1 to point 2 is removed
+  }
+  if (e?.type === 'arc') {
+    const sw = norm(e.a1 - e.a0), sp = p => Math.min(sw, norm(Math.atan2(p.y - e.cy, p.x - e.cx) - e.a0)); let a = sp(p1), b = sp(p2); if (a > b) [a, b] = [b, a];
+    if (b - a < 1e-9) throw new Error('The two break points are the same.'); const cut = []; if (a > 1e-9) cut.push([0, a]); if (b < sw - 1e-9) cut.push([b, sw]);
+    if (!cut.length) throw new Error('That would remove the whole arc. Use ERASE.'); const a0 = e.a0, arcs = cut.map(([u, v]) => [a0 + u, a0 + v]);
+    e.a0 = arcs[0][0]; e.a1 = arcs[0][1]; arcs.slice(1).forEach(([s, f]) => d.add({ ...make.arc(e.cx, e.cy, e.r, s, f), ...keep })); return;
+  }
+  throw new Error('BREAK works on lines, arcs and circles. EXPLODE polylines first.');
+}
+// STRETCH: points inside the crossing window move by (dx,dy); objects with one point (circle centre, text, block, point) move whole if that point is inside. Dimensions are not stretched.
+export function stretchWindow(d, a, b, dx, dy) {
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y), inn = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1; let n = 0;
+  for (const e of d.entities) {
+    if (!d.isSelectable(e)) continue; const c = structuredClone(e); let hit = false;
+    if (e.type === 'line') { if (inn(e.x1, e.y1)) { c.x1 += dx; c.y1 += dy; hit = true; } if (inn(e.x2, e.y2)) { c.x2 += dx; c.y2 += dy; hit = true; } }
+    else if (e.type === 'polyline') c.pts = e.pts.map(p => inn(p[0], p[1]) ? (hit = true, [p[0] + dx, p[1] + dy]) : p);
+    else if (e.type === 'circle' || e.type === 'arc') { if (inn(e.cx, e.cy)) { c.cx += dx; c.cy += dy; hit = true; } }
+    else if (['text', 'insert', 'point', 'xline', 'ray'].includes(e.type)) { if (inn(e.x, e.y)) { c.x += dx; c.y += dy; hit = true; } }
+    if (!hit) continue; const err = validate(c); if (err) throw new Error(err); Object.assign(e, c); n++;
+  }
+  if (!n) throw new Error('No object has a point inside the crossing window.'); return n;
 }
 export function explodeIds(d, ids) {
   let n = 0; for (const id of ids) { const e = d.get(id); if (e?.type === 'insert') { expand(d, e).forEach(p => d.add({ ...p, layer: e.layer })); d.remove([id]); n++; continue; } if (e?.type !== 'polyline') continue;

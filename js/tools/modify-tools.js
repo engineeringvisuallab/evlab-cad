@@ -4,6 +4,7 @@ import * as TF from '../geometry/transforms.js';
 import { createBlock } from '../geometry/blocks.js';
 const DEG = Math.PI / 180, dimPrompts = n => [`${n}: click a line, or specify the first point`, `${n}: specify the second point`, `${n}: specify the dimension line position`];
 const PR = {
+  break: ['BREAK: click the object at the first break point', 'BREAK: click the second break point'], stretch: ['STRETCH: first corner of the crossing window', 'STRETCH: opposite corner', 'STRETCH: specify the base point', 'STRETCH: specify the second point'],
   block: ['BLOCK: specify the base point'], insert: ['INSERT: specify the insertion point (Esc to finish)'],
   move: ['MOVE: specify base point', 'MOVE: specify destination'], copy: ['COPY: specify base point', 'COPY: specify destination (Enter to end)'],
   rotate: ['ROTATE: specify base point', 'ROTATE: click a direction, or type the angle in degrees'], scale: ['SCALE: specify base point', 'SCALE: type the scale factor (e.g. 2)'],
@@ -18,13 +19,18 @@ export function prompt(t, n, param, pts = []) {
   const extra = { offset: param > 0 ? ` (distance ${param})` : ' (type a distance first)', fillet: ` (radius ${param || 0})`, chamfer: param > 0 ? ` (distance ${param})` : ' (type a distance first)' }[t] ?? '';
   return p[Math.min(i, p.length - 1)] + (n === 0 ? extra : '');
 }
-export const preview = (t, pts, cur) => pts.length && ['move', 'copy', 'rotate', 'mirror'].includes(t) ? make.line(pts[0].x, pts[0].y, cur.x, cur.y) : null;
+export function preview(t, pts, cur) {
+  if (t === 'stretch') return pts.length === 1 ? make.rect(pts[0], cur) : pts.length === 3 ? make.line(pts[2].x, pts[2].y, cur.x, cur.y) : null;
+  return pts.length && ['move', 'copy', 'rotate', 'mirror'].includes(t) ? make.line(pts[0].x, pts[0].y, cur.x, cur.y) : null;
+}
 export function click(t, pts, p, c) {
   const n = pts.length, ids = c.ids, a = pts[0], hit = () => c.pick(p), done = (apply, message, next = []) => ({ apply, message, next });
   const first = what => { const h = hit(); return h ? h : null; };
   switch (t) {
     case 'block': return done(d => createBlock(d, c.param, ids, p), `Block "${c.param}" created from ${ids.length} object(s).`);
     case 'insert': return { entity: { type: 'insert', block: c.param.name, x: p.x, y: p.y, s: c.param.s, rot: c.param.rot }, next: [] };
+    case 'break': { if (!n) { const h = hit(); return h ? { next: [{ ...p, id: h.id }] } : { error: 'Click on a line, arc or circle.' }; } return done(d => X.breakEntity(d, a.id, a, p), 'Broken.'); }
+    case 'stretch': return n < 3 ? { next: [...pts, p] } : done(d => X.stretchWindow(d, pts[0], pts[1], p.x - pts[2].x, p.y - pts[2].y), 'Stretched.');
     case 'move': return n ? done(d => X.transformIds(d, ids, TF.move(p.x - a.x, p.y - a.y), false), `Moved ${ids.length} object(s).`) : { next: [p] };
     case 'copy': return n ? done(d => X.transformIds(d, ids, TF.move(p.x - a.x, p.y - a.y), true), `Copied ${ids.length} object(s). Click another destination or press Esc.`, [a]) : { next: [p] };
     case 'rotate': return n ? done(d => X.transformIds(d, ids, TF.rotate(a, Math.atan2(p.y - a.y, p.x - a.x)), false), `Rotated ${ids.length} object(s).`) : { next: [p] };

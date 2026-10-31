@@ -13,6 +13,7 @@ export const make = {
   line: (x1, y1, x2, y2) => ({ type: 'line', x1, y1, x2, y2 }),
   polyline: (pts, closed = false) => ({ type: 'polyline', pts: pts.map(p => [p[0], p[1]]), closed }),
   rect: (a, b) => make.polyline([[a.x, a.y], [b.x, a.y], [b.x, b.y], [a.x, b.y]], true),
+  point: (x, y) => ({ type: 'point', x, y }),
   circle: (cx, cy, r) => ({ type: 'circle', cx, cy, r }),
   arc: (cx, cy, r, a0, a1) => ({ type: 'arc', cx, cy, r, a0, a1 }),
 };
@@ -26,6 +27,8 @@ export function validate(e) {
     case 'text': return !fin(e.x, e.y, e.h, e.rot) || typeof e.str !== 'string' || !e.str.trim() ? bad('needs a position, height and text') : e.h <= 0 ? bad('height must be greater than 0') : null;
     case 'insert': return typeof e.block !== 'string' || !fin(e.x, e.y, e.s, e.rot) ? bad('needs a block name, position, scale and rotation') : e.s <= 0 ? bad('scale must be greater than 0') : null;
     case 'dim': return ['aligned', 'linear', 'radius', 'diameter'].includes(e.dtype) && Array.isArray(e.o) && fin(...e.o) ? null : bad('needs a type and a position');
+    case 'point': return fin(e.x, e.y) ? null : bad('coordinates must be numbers');
+    case 'xline': case 'ray': return fin(e.x, e.y, e.a) ? null : bad('needs a base point and an angle');
     case 'circle': return !fin(e.cx, e.cy, e.r) ? bad('values must be numbers') : e.r <= 0 ? bad('radius must be greater than 0') : null;
     case 'arc': return !fin(e.cx, e.cy, e.r, e.a0, e.a1) ? bad('values must be numbers') : e.r <= 0 ? bad('radius must be greater than 0')
       : Math.abs(norm(e.a1 - e.a0)) < 1e-9 ? bad('start and end angles are the same') : null;
@@ -51,6 +54,7 @@ export function bounds(e) {
   let xs, ys;
   if (e.type === 'line') { xs = [e.x1, e.x2]; ys = [e.y1, e.y2]; }
   else if (e.type === 'polyline') { xs = e.pts.map(p => p[0]); ys = e.pts.map(p => p[1]); }
+  else if (e.type === 'point' || e.type === 'xline' || e.type === 'ray') { xs = [e.x]; ys = [e.y]; }   // infinite lines: base point only
   else if (e.type === 'text') { const b = textBox(e), c = Math.cos(e.rot), s = Math.sin(e.rot), P = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [e.x + u * c - v * s, e.y + u * s + v * c]); xs = P.map(p => p[0]); ys = P.map(p => p[1]); }
   else if (e.type === 'circle') { xs = [e.cx - e.r, e.cx + e.r]; ys = [e.cy - e.r, e.cy + e.r]; }
   else {
@@ -60,6 +64,8 @@ export function bounds(e) {
   return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
 }
 export function distance(e, x, y) {
+  if (e.type === 'point') return dist(x, y, e.x, e.y);
+  if (e.type === 'xline' || e.type === 'ray') { const c = Math.cos(e.a), s = Math.sin(e.a), dx = x - e.x, dy = y - e.y; return e.type === 'ray' && dx * c + dy * s < 0 ? Math.hypot(dx, dy) : Math.abs(-s * dx + c * dy); }
   if (e.type === 'text') { const b = textBox(e), c = Math.cos(e.rot), s = Math.sin(e.rot), u = (x - e.x) * c + (y - e.y) * s, v = -(x - e.x) * s + (y - e.y) * c; return Math.hypot(Math.max(b.u0 - u, 0, u - b.u1), Math.max(b.v0 - v, 0, v - b.v1)); }
   if (e.type === 'circle') return Math.abs(dist(x, y, e.cx, e.cy) - e.r);
   if (e.type === 'arc') {
@@ -72,7 +78,7 @@ export function grips(e) {
   switch (e.type) {
     case 'line': return [[e.x1, e.y1], [(e.x1 + e.x2) / 2, (e.y1 + e.y2) / 2], [e.x2, e.y2]];
     case 'polyline': return e.pts;
-    case 'text': case 'insert': return [[e.x, e.y]];
+    case 'text': case 'insert': case 'point': case 'xline': case 'ray': return [[e.x, e.y]];
     case 'circle': return [[e.cx, e.cy], [e.cx + e.r, e.cy], [e.cx, e.cy + e.r], [e.cx - e.r, e.cy], [e.cx, e.cy - e.r]];
     case 'arc': return [[e.cx, e.cy], [e.cx + e.r * Math.cos(e.a0), e.cy + e.r * Math.sin(e.a0)], [e.cx + e.r * Math.cos(e.a1), e.cy + e.r * Math.sin(e.a1)]];
   }

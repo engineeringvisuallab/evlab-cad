@@ -1,3 +1,4 @@
+import { LTYPE_NAMES, canon } from '../geometry/linetypes.js';
 export function createLayerPanel(root, drawing, getSel, changed, say, tx) {
   const run = fn => { tx(fn); changed(); };
   const el = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); kids.forEach(k => n.append(k)); return n; };
@@ -16,6 +17,7 @@ export function createLayerPanel(root, drawing, getSel, changed, say, tx) {
       root.append(el('div', { className: 'lrow' + (l.name === drawing.current ? ' cur' : '') }, [
         el('button', { textContent: l.name === drawing.current ? '●' : '○', title: 'Set current', onclick: () => run(() => { drawing.current = l.name; }) }),
         el('input', { type: 'color', value: l.color, onchange: e => run(() => { l.color = e.target.value; }) }), name,
+        el('select', { title: 'Line type', className: 'ltsel', onchange: ev => run(() => { l.lineType = ev.target.value; }) }, LTYPE_NAMES.map(n => new Option(n.slice(0, 6), n, false, n === (canon(l.lineType) || 'CONTINUOUS')))),
         tog('visible', 'V', 'Visible'), tog('locked', 'L', 'Locked'), tog('frozen', 'F', 'Frozen')]));
     }
   }

@@ -2,10 +2,11 @@ import { validate, bounds } from './entity.js';
 import { expand } from '../geometry/expand.js';
 import { defaultLayout } from '../layouts/paper-space.js';
 const PAL = ['#ff5f5f', '#5cb85c', '#6fd3ff', '#f0b441', '#c792ea', '#ff9f43'];
-const base = n => ({ name: n, color: '#e8eef2', lineType: 'Continuous', lineWeight: 0.25, visible: true, locked: false, frozen: false, plot: true });
+const base = n => ({ name: n, color: '#e8eef2', lineType: 'CONTINUOUS', lineWeight: 0.25, visible: true, locked: false, frozen: false, plot: true });
 export class Drawing {
-  constructor() { this.entities = []; this.units = 'mm'; this.nextId = 1; this.blocks = {}; this.layout = defaultLayout(); this.dimStyle = { precision: 2, scale: 1, arrow: 2.5, text: 2.5 }; this.layers = [base('0')]; this.current = '0'; }
+  constructor() { this.entities = []; this.units = 'mm'; this.nextId = 1; this.blocks = {}; this.layout = defaultLayout(); this.dimStyle = { precision: 2, scale: 1, arrow: 2.5, text: 2.5, auto: false }; this.layers = [base('0')]; this.current = '0'; }
   layer(n) { return this.layers.find(l => l.name === n); }
+  lineTypeOf(e) { const t = e.lineType && e.lineType !== 'BYLAYER' ? e.lineType : this.layer(e.layer)?.lineType; return t || 'CONTINUOUS'; }
   isVisible(e) { const l = this.layer(e.layer); return !!l && l.visible && !l.frozen; }
   isSelectable(e) { return this.isVisible(e) && !this.layer(e.layer).locked; }
   colorOf(e) { return e.color === 'BYLAYER' ? this.layer(e.layer)?.color ?? '#e8eef2' : e.color; }

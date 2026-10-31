@@ -2,6 +2,7 @@ import { expand } from '../geometry/expand.js';
 import * as TF from '../geometry/transforms.js';
 import { titleBlockItems } from './title-block.js';
 import { bounds } from '../core/entity.js';
+import { dashMm } from '../geometry/linetypes.js';
 export const SIZES = { A4: [210, 297], A3: [297, 420], A2: [420, 594], A1: [594, 841] };
 export const SCALES = [1, 2, 5, 10, 20, 25, 50, 75, 100, 150, 200, 250, 500, 1000, 2000, 5000];
 export const defaultLayout = () => ({ size: 'A3', orientation: 'landscape', title: 'Untitled drawing', number: 'EV-001', project: 'Project', revision: 'A', scale: 100, center: [0, 0], northArrow: true });
@@ -27,8 +28,13 @@ export function buildSheet(d) {
   const l = d.layout, [W, H] = sheetSize(l), vp = viewportRect(l), k = unitMM(d) / l.scale, items = titleBlockItems(l, W, H, vp);
   const T = { pt: (x, y) => [vp.x + vp.w / 2 + (x - l.center[0]) * k, vp.y + vp.h / 2 + (y - l.center[1]) * k], r: k, da: a => a, flip: false };
   for (const e of d.entities) {
-    const L = d.layer(e.layer); if (!L || !L.visible || L.frozen || !L.plot) continue; const lw = Math.max(0.05, L.lineWeight);
-    for (const x of expand(d, e)) items.push({ ...item(TF.apply(x, T), lw), clip: true });
+    const L = d.layer(e.layer); if (!L || !L.visible || L.frozen || !L.plot) continue; const lw = Math.max(0.05, L.lineWeight), dash = dashMm(d.lineTypeOf(e));
+    for (const x of expand(d, e)) {
+      const t = TF.apply(x, T);
+      if (t.type === 'point') items.push({ t: 'line', x1: t.x - 1, y1: t.y, x2: t.x + 1, y2: t.y, lw, clip: true }, { t: 'line', x1: t.x, y1: t.y - 1, x2: t.x, y2: t.y + 1, lw, clip: true });
+      else if (t.type === 'xline' || t.type === 'ray') { const c = 1e5 * Math.cos(t.a), s = 1e5 * Math.sin(t.a), f = t.type === 'xline'; items.push({ t: 'line', x1: f ? t.x - c : t.x, y1: f ? t.y - s : t.y, x2: t.x + c, y2: t.y + s, lw, clip: true, dash }); }
+      else items.push({ ...item(t, lw), clip: true, dash: t.type === 'text' ? undefined : dash });
+    }
   }
   return { W, H, items, clip: vp };
 }
